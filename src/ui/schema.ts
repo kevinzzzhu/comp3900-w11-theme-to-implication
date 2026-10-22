@@ -33,7 +33,6 @@ export const schema: SectionDef[] = [
       text('t1.assumptions', 'Step 1: My assumptions before coding'),
       table('t1.codes', 'Step 1: Initial codes', copy.t1CodeCols),
       text('t1.lensNote', 'Step 1: Lens reflection'),
-      table('t1.myObs', 'Step 2: Observations I added', ['Video', 'Time', 'Label', 'Excerpt']),
       text('t1.d1', `Step 2 discussion: ${copy.t1Discussion[0]}`, true),
       text('t1.d2', `Step 2 discussion: ${copy.t1Discussion[1]}`, true),
       text('t1.d3', `Step 2 discussion: ${copy.t1Discussion[2]}`, true),

@@ -19,6 +19,7 @@ export function renderResources(_ctx: PageCtx): HTMLElement {
     'div',
     { class: 'page' },
     pageHeader('Resources and extensions', 'Readings grouped by purpose. "Check before citing" means the reference is not fully verified.'),
+    h('p', { class: 'panel' }, h('strong', null, 'Backup worksheet: '), h('a', { href: `${import.meta.env.BASE_URL}backup/Week11-group-backup.xlsx`, download: '' }, 'download the Excel file'), ' with a tab for each task, in case the website is unavailable. Your tutor can share one copy per group.'),
     ordered.length
       ? ordered.map((g, i) => collapsible(`${GROUP_LABEL[g] ?? g} (${groups.get(g)?.length ?? 0})`, [h('ul', { class: 'resource-list' }, (groups.get(g) ?? []).map(resourceItem))], { open: i === 0 }))
       : h('p', { class: 'muted' }, 'The resource list has not loaded.'),

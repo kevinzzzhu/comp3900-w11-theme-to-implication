@@ -404,3 +404,7 @@ fieldset { border: 0; padding: 0; margin: 0 0 1rem; min-width: 0; }
   .galaxy-wrap .widget-stage { height: clamp(360px, 60vh, 560px); }
   .galaxy-fs { float: none; margin: 0 0 8px; }
 }
+
+/* ---------- code wall legend ---------- */
+.wall-legend { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.85rem; color: var(--text); }
+.wall-legend .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }

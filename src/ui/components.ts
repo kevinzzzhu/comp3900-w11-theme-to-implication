@@ -217,6 +217,8 @@ export interface TableOpts {
   minRows?: number;
   addLabel?: string;
   placeholders?: string[];
+  /** Keep a stable id per row (always on for group tables). */
+  trackIds?: boolean;
 }
 
 export interface TableHandle {
@@ -224,6 +226,10 @@ export interface TableHandle {
   addRow(values?: string[]): void;
   /** Put values in the first blank row, or add a row when none is blank. Returns the 1-based row number used. */
   fillRow(values: string[]): number;
+  /** Called after every local edit to the table. */
+  onChange(cb: () => void): void;
+  /** Current rows with their stable ids (ids are empty strings unless ids are tracked). */
+  snapshot(): { id: string; cells: string[] }[];
 }
 
 function normaliseRows(o: TableOpts, stored: string[][] | null): string[][] {
@@ -237,9 +243,11 @@ function normaliseRows(o: TableOpts, stored: string[][] | null): string[][] {
 
 export function editableTable(o: TableOpts): TableHandle {
   const shared = isGroupKey(o.key);
+  const track = shared || !!o.trackIds; // stable row ids, so other parts of the page can follow individual rows
+  const changeCbs: (() => void)[] = [];
   const rows = normaliseRows(o, getRows(o.key));
-  const ids: string[] = shared ? getRowIds(o.key).slice(0, rows.length) : [];
-  if (shared) {
+  const ids: string[] = track ? getRowIds(o.key).slice(0, rows.length) : [];
+  if (track) {
     while (ids.length < rows.length) ids.push(newRowId());
     setRowIds(o.key, ids); // persist now so the room and this table agree on row ids
   }
@@ -247,8 +255,9 @@ export function editableTable(o: TableOpts): TableHandle {
   const tbody = h('tbody');
   let cells: HTMLTextAreaElement[][] = [];
   const save = (): void => {
-    if (shared) setRowIds(o.key, ids);
+    if (track) setRowIds(o.key, ids);
     setRows(o.key, rows);
+    changeCbs.forEach((cb) => cb());
   };
 
   const render = (focusRow = -1): void => {
@@ -287,7 +296,7 @@ export function editableTable(o: TableOpts): TableHandle {
             disabled: rows.length <= min,
             onClick: () => {
               rows.splice(ri, 1);
-              if (shared) ids.splice(ri, 1);
+              if (track) ids.splice(ri, 1);
               save();
               render(Math.min(ri, rows.length - 1));
             },
@@ -306,7 +315,7 @@ export function editableTable(o: TableOpts): TableHandle {
 
   const addRow = (values?: string[], focus = true): void => {
     rows.push(o.cols.map((_, i) => values?.[i] ?? ''));
-    if (shared) ids.push(newRowId());
+    if (track) ids.push(newRowId());
     save();
     render(focus ? rows.length - 1 : -1);
   };
@@ -384,7 +393,13 @@ export function editableTable(o: TableOpts): TableHandle {
     el.append(h('div', { class: 'table-actions' }, h('button', { type: 'button', class: 'btn btn-small', onClick: () => addRow() }, o.addLabel ?? 'Add row')));
   }
   render();
-  return { el, addRow: (v) => addRow(v), fillRow };
+  return {
+    el,
+    addRow: (v) => addRow(v),
+    fillRow,
+    onChange: (cb) => changeCbs.push(cb),
+    snapshot: () => rows.map((r, i) => ({ id: ids[i] ?? '', cells: [...r] })),
+  };
 }
 
 /* ---------- layout helpers ---------- */

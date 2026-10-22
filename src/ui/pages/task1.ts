@@ -1,40 +1,40 @@
 import { lensObservationIds, lenses } from '../../data/lenses';
 import { observations } from '../../data/observations';
-import { videos } from '../../data/videos';
-import { mountGalaxy, type OrbPos } from '../../scenes/galaxy';
-import { onShared, sharedSet } from '../../sync/room';
 import { mountPrism } from '../../scenes/prism';
-import type { Label, Observation, VideoId } from '../../types';
+import { mountWall, type WallHandle, type WallNote, type WallPos } from '../../scenes/wall';
+import { onRoom, onShared, roomState, sharedSet } from '../../sync/room';
 import {
   boundTextarea, collapsible, editableTable, mountWhenVisible, pageHeader, quoteBox, stepper, textField, widgetPanel, type PageCtx,
 } from '../components';
-import { LENS_COLORS, labelMeaning, t1ClusterCols, t1CodeCols, t1Discussion } from '../copy';
-import { fmtTime, h, parseTime, uid } from '../dom';
-import { getRows, setRows } from '../state';
+import { LENS_COLORS, t1ClusterCols, t1CodeCols, t1Discussion } from '../copy';
+import { h, uid } from '../dom';
 import { TimeLink, VideoChip, VideoPanel, personName } from '../video';
+import type { VideoId } from '../../types';
 
-const MY_OBS_KEY = 't1.myObs';
+const MEMBER_COLORS = ['#2B6672', '#B5527A', '#C48A1F', '#6A5ACD', '#3E8E5A', '#C0563B', '#5B7DB1', '#8C6D31'];
 
-function labelBadge(l: Label): HTMLElement {
-  return h('span', { class: `label-badge label-${l}`, title: labelMeaning[l].name }, l);
+/** A random id for this browser, so a group's notes can be told apart without asking anyone's name. */
+function memberId(): string {
+  try {
+    const have = localStorage.getItem('w11:me');
+    if (have) return have;
+    const fresh = Math.random().toString(36).slice(2, 8);
+    localStorage.setItem('w11:me', fresh);
+    return fresh;
+  } catch {
+    return 'me';
+  }
 }
 
-function inParticipantWindow(o: Observation): boolean | null {
-  const v = videos.find((x) => x.id === o.video);
-  if (!v || v.participantWindows.length === 0) return null;
-  return v.participantWindows.some(([a, b]) => o.t >= a && o.t <= b);
+interface CodeNote {
+  id: string;
+  code: string;
+  excerpt: string;
+  why: string;
+  owner: string;
 }
 
-function loadMine(): Observation[] {
-  const rows = getRows(MY_OBS_KEY) ?? [];
-  const out: Observation[] = [];
-  rows.forEach((r, i) => {
-    const t = parseTime(r[1] ?? '');
-    if (t === null || !['simon', 'sarah', 'stacey'].includes(r[0])) return;
-    out.push({ id: r[4] || `mine-${i + 1}`, video: r[0] as VideoId, t, label: (['O', 'R', 'I'].includes(r[2]) ? r[2] : 'I') as Label, excerpt: r[3] ?? '' });
-  });
-  return out;
-}
+const clip = (v: string, n: number): string => v.trim().slice(0, n);
 
 export function renderTask1(ctx: PageCtx): HTMLElement {
   const root = h('div', { class: 'page' });
@@ -49,6 +49,7 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
     minRows: 1,
     addLabel: 'Add a row',
     placeholders: ['e.g. Simon 3:25, says the chair "is part of me"', 'A short label', 'What in the moment led to this code?'],
+    trackIds: true,
   });
 
   const prismPanel = widgetPanel('Lens Prism', 'The same observations, coded through different assumptions.');
@@ -94,7 +95,7 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
   showLens(-1);
 
   const step1 = [
-    h('p', { class: 'instruction' }, 'Code 3-5 moments from your video. A code is a short label for what a moment is about.'),
+    h('p', { class: 'instruction' }, 'Code 3-5 moments from your video. A code is a short label for what a moment is about. Your codes go on your group\'s wall in Step 2.'),
     textField({
       key: 't1.assumptions',
       label: 'What assumptions do you bring to this topic?',
@@ -109,65 +110,196 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
     ]),
   ];
 
-  /* ---------------- Step 2 ---------------- */
-  const cardHost = h('div', { class: 'obs-card-host', 'aria-live': 'polite' }, h('p', { class: 'muted' }, 'Click an orb to read it here.'));
+  /* ---------------- Step 2: the code wall ---------------- */
+  // The wall is made of the codes written in Step 1. Your own come straight from the table; a group room adds everyone else's.
+  const me = memberId();
+  const notes = new Map<string, CodeNote>();
+  const positions = new Map<string, WallPos>();
+  const published = new Set<string>();
 
-  const showCard = (o: Observation): void => {
-    const v = videos.find((x) => x.id === o.video);
-    const inWin = inParticipantWindow(o);
-    const m = labelMeaning[o.label];
-    const addBtn = h('button', { type: 'button', class: 'btn btn-small' }, 'Copy into my code table');
-    const copied = h('p', { class: 'note-ok small', role: 'status', 'aria-live': 'polite' });
-    addBtn.addEventListener('click', () => {
-      const row = codeTable.fillRow([`${personName(o.video)} ${fmtTime(o.t)}: ${o.excerpt}`, '', '']);
-      addBtn.setAttribute('disabled', '');
-      addBtn.textContent = 'Copied';
-      const open = h('button', { type: 'button', class: 'btn btn-small btn-primary' }, 'Open my code table');
-      open.addEventListener('click', () => window.dispatchEvent(new CustomEvent('w11:goto-step', { detail: { key: 'task1', index: 0 } })));
-      copied.replaceChildren(`Added as row ${row} of your code table in Step 1. `, open);
-    });
+  const owners = (): string[] => [...new Set([me, ...[...notes.values()].map((n) => n.owner)])].sort();
+  const colorOf = (owner: string): string => MEMBER_COLORS[Math.max(0, owners().indexOf(owner)) % MEMBER_COLORS.length];
+  const toWall = (n: CodeNote): WallNote => ({ id: n.id, code: n.code, excerpt: n.excerpt, why: n.why, color: colorOf(n.owner), mine: n.owner === me });
+
+  const cardHost = h('div', { class: 'obs-card-host', 'aria-live': 'polite' });
+  const legend = h('ul', { class: 'wall-legend', 'aria-label': 'Who wrote which colour' });
+  const gotoStep1 = (): void => {
+    window.dispatchEvent(new CustomEvent('w11:goto-step', { detail: { key: 'task1', index: 0 } }));
+  };
+  const showHint = (): void => {
+    const open = h('button', { type: 'button', class: 'btn btn-small' }, 'Add or edit codes in Step 1');
+    open.addEventListener('click', gotoStep1);
+    cardHost.replaceChildren(h('p', { class: 'muted' }, 'Click a note to read it here. Your codes come from your Step 1 table.'), open);
+  };
+  showHint();
+
+  const paintLegend = (): void => {
+    const others = owners().filter((o) => o !== me);
+    legend.replaceChildren(
+      ...[me, ...others].map((o) =>
+        h('li', null, h('span', { class: 'swatch', style: `background:${colorOf(o)}`, 'aria-hidden': 'true' }), o === me ? 'You' : `Groupmate ${others.indexOf(o) + 1}`),
+      ),
+    );
+  };
+
+  const showCard = (id: string): void => {
+    const n = notes.get(id);
+    if (!n) return;
+    const t = /(simon|sarah|stacey)\D{0,4}(\d{1,2}):(\d{2})/i.exec(n.excerpt);
     cardHost.replaceChildren(
       h(
         'article',
-        { class: 'obs-card', style: `--vc:${v?.color ?? '#888'}` },
-        h('header', null, VideoChip(o.video), ' ', TimeLink(o.video, o.t), ' ', labelBadge(o.label), h('span', { class: 'small' }, ` ${m.name}`)),
-        quoteBox(o.excerpt),
-        inWin === false ? h('p', { class: 'note-warn small' }, 'May not be the participant speaking, so it may not count as participant data.') : null,
-        o.checkAgainstVideo ? h('p', { class: 'note-warn small' }, 'Wording is from auto-captions. Check it against the video.') : null,
-        addBtn,
-        copied,
+        { class: 'obs-card', style: `--vc:${colorOf(n.owner)}` },
+        h('header', null, h('strong', null, n.code), ' ', t ? TimeLink(t[1].toLowerCase() as VideoId, Number(t[2]) * 60 + Number(t[3])) : null),
+        n.excerpt ? quoteBox(n.excerpt) : null,
+        n.why ? h('p', { class: 'small' }, h('strong', null, 'Why: '), n.why) : null,
+        h('p', { class: 'small muted' }, n.owner === me ? 'Your code.' : 'A groupmate\'s code.'),
+        n.owner === me ? (() => {
+          const edit = h('button', { type: 'button', class: 'btn btn-small' }, 'Edit in Step 1');
+          edit.addEventListener('click', gotoStep1);
+          return edit;
+        })() : null,
       ),
     );
   };
 
-  const obsList = h('ul', { class: 'obs-list' });
-  const addToList = (o: Observation): void => {
-    obsList.append(
-      h(
-        'li',
-        { style: `--vc:${videos.find((x) => x.id === o.video)?.color ?? '#888'}` },
-        h('button', { type: 'button', class: 'obs-btn', onClick: () => showCard(o) }, h('span', { class: 'vdot', 'aria-hidden': 'true' }), `${personName(o.video)} ${fmtTime(o.t)} `, labelBadge(o.label), ` ${o.excerpt}`),
-      ),
-    );
+  const wallPanel = widgetPanel('Code Wall', 'Drag related codes together. Each colour is one person; your own notes are marked "you".');
+  const wall = mountWhenVisible(ctx, wallPanel, (el) => mountWall(el, { onSelect: showCard }));
+
+  const live = (): boolean => roomState().phase === 'live' || roomState().phase === 'offline';
+  const posText = (p: WallPos): string => `${p[0].toFixed(2)},${p[1].toFixed(2)}`;
+  const noteJson = (n: CodeNote): string => JSON.stringify({ c: n.code, e: n.excerpt, w: n.why, m: n.owner });
+  const publishNote = (n: CodeNote): void => {
+    sharedSet(['n', n.id], noteJson(n));
+    const p = positions.get(n.id);
+    if (p) sharedSet(['p', n.id], posText(p));
   };
-  observations.forEach(addToList);
 
-  const galaxyPanel = widgetPanel('Observation Galaxy', 'Drag orbs together to cluster them. Colour is the video; shape is the label (sphere O, cube R, octahedron I).');
-  const galaxy = mountWhenVisible(ctx, galaxyPanel, (el) => mountGalaxy(el, observations, { onSelect: showCard }));
+  const placeNote = (g: WallHandle, n: CodeNote, at?: WallPos): void => {
+    const where = g.upsert(toWall(n), at);
+    if (where) positions.set(n.id, where);
+  };
+  const repaintAll = (g: WallHandle): void => {
+    for (const n of notes.values()) g.upsert(toWall(n));
+    paintLegend();
+  };
 
-  // Wide stage with the reading card beside it; "Full screen" is for projecting or a closer look.
-  const galaxyWrap = h('div', { class: 'galaxy-wrap' }, galaxyPanel.el, h('div', { class: 'galaxy-side' }, cardHost));
+  /** Mirror the Step 1 table onto the wall (and into the room when joined). */
+  const syncOwn = (): void => {
+    const fresh = new Map<string, CodeNote>();
+    for (const row of codeTable.snapshot()) {
+      const code = clip(row.cells[1] ?? '', 60);
+      if (!row.id || !code) continue;
+      fresh.set(row.id, { id: row.id, code, excerpt: clip(row.cells[0] ?? '', 160), why: clip(row.cells[2] ?? '', 200), owner: me });
+    }
+    for (const [id, n] of [...notes]) {
+      if (n.owner !== me || fresh.has(id)) continue;
+      notes.delete(id);
+      positions.delete(id);
+      published.delete(id);
+      wall.ready((g) => g.remove(id));
+      if (live()) {
+        sharedSet(['n', id], null);
+        sharedSet(['p', id], null);
+      }
+    }
+    for (const [id, n] of fresh) {
+      const before = notes.get(id);
+      if (before && before.code === n.code && before.excerpt === n.excerpt && before.why === n.why) continue;
+      const isNew = !before;
+      notes.set(id, n);
+      wall.ready((g) => {
+        placeNote(g, n);
+        if (isNew || live()) paintLegend();
+        if (live()) publishNote(n);
+      });
+    }
+    paintLegend();
+  };
+  codeTable.onChange(syncOwn);
+  syncOwn();
+  wall.ready((g) => {
+    g.onMoved((id, pos) => {
+      positions.set(id, pos);
+      sharedSet(['p', id], posText(pos));
+    });
+    repaintAll(g);
+  });
+
+  // Joining a room: offer our notes (and where they sit) to the group.
+  const stopRoom = onRoom(() => {
+    if (!cardHost.isConnected) {
+      stopRoom();
+      return;
+    }
+    if (!live()) return;
+    for (const n of notes.values()) if (n.owner === me && !published.has(n.id)) {
+      published.add(n.id);
+      publishNote(n);
+    }
+  });
+
+  // Groupmates' notes and positions arrive through the shared channel.
+  const stopShared = onShared((tree) => {
+    if (!cardHost.isConnected) {
+      stopShared();
+      return;
+    }
+    const nNode = typeof tree.n === 'object' && tree.n ? tree.n : {};
+    const pNode = typeof tree.p === 'object' && tree.p ? tree.p : {};
+    const remoteIds = new Set<string>();
+    for (const [id, raw] of Object.entries(nNode)) {
+      if (typeof raw !== 'string') continue;
+      try {
+        const r = JSON.parse(raw) as { c: string; e: string; w: string; m: string };
+        if (typeof r.c !== 'string' || !r.c) continue;
+        remoteIds.add(id);
+        const local = notes.get(id);
+        if (local && local.owner === me) continue; // our own note: the table is the source of truth
+        const next: CodeNote = { id, code: clip(r.c, 60), excerpt: clip(String(r.e ?? ''), 160), why: clip(String(r.w ?? ''), 200), owner: String(r.m || 'x') };
+        const changed = !local || local.code !== next.code || local.excerpt !== next.excerpt || local.why !== next.why || local.owner !== next.owner;
+        if (!changed) continue;
+        notes.set(id, next);
+        const p = typeof pNode[id] === 'string' ? (pNode[id] as string).split(',').map(Number) : null;
+        const at = p && p.length === 2 && p.every(Number.isFinite) ? (p as WallPos) : undefined;
+        wall.ready((g) => {
+          placeNote(g, next, at);
+          repaintAll(g);
+        });
+      } catch {
+        /* ignore a malformed note */
+      }
+    }
+    for (const [id, n] of [...notes]) {
+      if (n.owner === me || remoteIds.has(id)) continue;
+      notes.delete(id);
+      positions.delete(id);
+      wall.ready((g) => g.remove(id));
+      paintLegend();
+    }
+    for (const [id, raw] of Object.entries(pNode)) {
+      if (typeof raw !== 'string' || !notes.has(id)) continue;
+      const p = raw.split(',').map(Number);
+      if (p.length === 2 && p.every(Number.isFinite)) {
+        positions.set(id, p as WallPos);
+        wall.ready((g) => g.setPosition(id, p as WallPos));
+      }
+    }
+  });
+
+  // Big stage with the reading card beside it; "Full screen" is for projecting or a closer look.
+  const wallWrap = h('div', { class: 'galaxy-wrap' }, wallPanel.el, h('div', { class: 'galaxy-side' }, cardHost, legend));
   const fsBtn = h('button', { type: 'button', class: 'btn btn-small galaxy-fs', 'aria-pressed': 'false' }, 'Full screen');
   const setFull = (on: boolean): void => {
     fsBtn.textContent = on ? 'Exit full screen' : 'Full screen';
     fsBtn.setAttribute('aria-pressed', String(on));
-    galaxyWrap.classList.toggle('is-expanded', on && !document.fullscreenElement);
+    wallWrap.classList.toggle('is-expanded', on && !document.fullscreenElement);
     window.dispatchEvent(new Event('resize'));
   };
   fsBtn.addEventListener('click', () => {
     const on = fsBtn.getAttribute('aria-pressed') !== 'true';
-    if (on && galaxyWrap.requestFullscreen) {
-      galaxyWrap.requestFullscreen().then(() => setFull(true)).catch(() => setFull(true));
+    if (on && wallWrap.requestFullscreen) {
+      wallWrap.requestFullscreen().then(() => setFull(true)).catch(() => setFull(true));
     } else if (!on && document.fullscreenElement) {
       void document.exitFullscreen();
     } else {
@@ -175,100 +307,33 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
     }
   });
   document.addEventListener('fullscreenchange', () => {
-    if (!galaxyWrap.isConnected) return;
-    setFull(document.fullscreenElement === galaxyWrap);
+    if (!wallWrap.isConnected) return;
+    setFull(document.fullscreenElement === wallWrap);
   });
-  galaxyPanel.el.querySelector('h3')?.after(fsBtn);
+  wallPanel.el.querySelector('h3')?.after(fsBtn);
 
-  const mine = loadMine();
-  mine.forEach(addToList);
-  mine.forEach((o) => galaxy.ready((g) => g.addOrb(o)));
-
-  /* Group room: orb moves and orbs added by groupmates travel through the shared "galaxy" channel. */
-  const known = new Set<string>([...observations.map((x) => x.id), ...mine.map((x) => x.id)]);
-  const posText = (p: OrbPos): string => p.map((n) => n.toFixed(2)).join(',');
-  galaxy.ready((g) => g.onMoved((id, pos) => sharedSet(['p', id], posText(pos))));
-  const stopShared = onShared((tree) => {
-    if (!galaxyPanel.el.isConnected) {
-      stopShared();
-      return;
-    }
-    const orbsNode = typeof tree.o === 'object' && tree.o ? tree.o : {};
-    const posNode = typeof tree.p === 'object' && tree.p ? tree.p : {};
-    for (const [id, raw] of Object.entries(orbsNode)) {
-      if (known.has(id) || typeof raw !== 'string') continue;
-      try {
-        const r = JSON.parse(raw) as { v: VideoId; t: number; l: Label; x: string };
-        if (!['simon', 'sarah', 'stacey'].includes(r.v) || !['O', 'R', 'I'].includes(r.l)) continue;
-        const o: Observation = { id, video: r.v, t: Number(r.t) || 0, label: r.l, excerpt: String(r.x ?? '') };
-        known.add(id);
-        addToList(o);
-        const p = typeof posNode[id] === 'string' ? (posNode[id] as string).split(',').map(Number) : null;
-        galaxy.ready((g) => g.addOrb(o, p && p.length === 3 && p.every(Number.isFinite) ? (p as OrbPos) : undefined));
-      } catch {
-        /* ignore a malformed record */
-      }
-    }
-    for (const [id, raw] of Object.entries(posNode)) {
-      if (typeof raw !== 'string' || !known.has(id)) continue;
-      const p = raw.split(',').map(Number);
-      if (p.length === 3 && p.every(Number.isFinite)) galaxy.ready((g) => g.setPosition(id, p as OrbPos));
-    }
-  });
-
-  /* add-my-observation form */
-  const formMsg = h('p', { class: 'small', role: 'status', 'aria-live': 'polite' });
-  const selVideo = h('select', { id: 'my-video' }, videos.map((v) => h('option', { value: v.id }, v.person)));
-  const inTime = h('input', { id: 'my-time', type: 'text', inputmode: 'numeric', placeholder: 'm:ss, e.g. 3:25', autocomplete: 'off' });
-  const selLabel = h('select', { id: 'my-label' }, (['O', 'R', 'I'] as Label[]).map((l) => h('option', { value: l }, `${l}: ${labelMeaning[l].name}`)));
-  const inText = h('input', { id: 'my-excerpt', type: 'text', placeholder: 'Paraphrase, or a quote of 15 words or fewer', autocomplete: 'off' });
-  const form = h(
+  /* quick add: a new code lands in the Step 1 table and therefore on the wall */
+  const quickCode = h('input', { id: 'qa-code', type: 'text', placeholder: 'A short label', autocomplete: 'off', maxlength: 60 });
+  const quickExcerpt = h('input', { id: 'qa-excerpt', type: 'text', placeholder: 'e.g. Sarah 4:00, Sinclair reminds her to drink water', autocomplete: 'off' });
+  const quickMsg = h('p', { class: 'small', role: 'status', 'aria-live': 'polite' });
+  const quickForm = h(
     'form',
     { class: 'add-form', novalidate: true },
-    h(
-      'div',
-      { class: 'form-grid' },
-      h('div', { class: 'field' }, h('label', { for: 'my-video' }, 'Video'), selVideo),
-      h('div', { class: 'field' }, h('label', { for: 'my-time' }, 'Time'), inTime),
-      h('div', { class: 'field' }, h('label', { for: 'my-label' }, 'Label'), selLabel),
-      h('div', { class: 'field field-wide' }, h('label', { for: 'my-excerpt' }, 'What happened'), inText),
-    ),
-    h('button', { type: 'submit', class: 'btn btn-primary' }, 'Add orb'),
-    formMsg,
+    h('div', { class: 'form-grid' }, h('div', { class: 'field' }, h('label', { for: 'qa-code' }, 'Code'), quickCode), h('div', { class: 'field field-wide' }, h('label', { for: 'qa-excerpt' }, 'Moment (with timestamp)'), quickExcerpt)),
+    h('button', { type: 'submit', class: 'btn btn-primary' }, 'Add to my codes'),
+    quickMsg,
   );
-  form.addEventListener('submit', (e) => {
+  quickForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    const t = parseTime(inTime.value);
-    const text = inText.value.trim();
-    if (!videos.length) {
-      formMsg.textContent = 'Video details have not loaded, so an observation cannot be added yet.';
+    if (!quickCode.value.trim()) {
+      quickMsg.textContent = 'Give the code a short label.';
+      quickCode.focus();
       return;
     }
-    if (t === null) {
-      formMsg.textContent = 'Enter the time as m:ss, for example 3:25.';
-      inTime.focus();
-      return;
-    }
-    if (!text) {
-      formMsg.textContent = 'Add a short description of what happened.';
-      inText.focus();
-      return;
-    }
-    const rows = getRows(MY_OBS_KEY) ?? [];
-    const id = `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
-    rows.push([selVideo.value, fmtTime(t), selLabel.value, text, id]);
-    setRows(MY_OBS_KEY, rows);
-    const o: Observation = { id, video: selVideo.value as VideoId, t, label: selLabel.value as Label, excerpt: text };
-    known.add(id);
-    galaxy.ready((g) => {
-      const at = g.addOrb(o);
-      sharedSet(['o', id], JSON.stringify({ v: o.video, t: o.t, l: o.label, x: o.excerpt }));
-      if (at) sharedSet(['p', id], posText(at));
-    });
-    addToList(o);
-    inText.value = '';
-    inTime.value = '';
-    formMsg.textContent = 'Added to the list and the galaxy (and shared with your group room, if you are in one).';
+    const row = codeTable.fillRow([quickExcerpt.value.trim(), quickCode.value.trim(), '']);
+    quickMsg.textContent = `Added as row ${row} of your Step 1 table and put on the wall.`;
+    quickCode.value = '';
+    quickExcerpt.value = '';
   });
 
   const clusterTable = editableTable({
@@ -280,13 +345,12 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
   });
 
   const step2 = [
-    h('p', { class: 'instruction' }, 'Take turns introducing your video and sharing 2-3 observations with their codes. Then group what belongs together.'),
-    galaxyWrap,
+    h('p', { class: 'instruction' }, 'Your codes from Step 1 are on the wall. Take turns explaining yours, drag related codes together, then name each cluster below. Join a group room to see everyone\'s codes on one wall.'),
+    wallWrap,
     h('h3', null, 'Cluster table'),
     clusterTable.el,
     collapsible('Discussion prompts', [h('ol', { class: 'prompt-list' }, t1Discussion.map((p, i) => h('li', null, h('p', null, p), boundTextarea(`t1.d${i + 1}`, p, 2))))]),
-    collapsible('Browse all observations as a list', [observations.length ? obsList : h('p', { class: 'muted' }, 'Observations have not loaded.')]),
-    collapsible('Add an observation of your own', [form]),
+    collapsible('Add a code from here', [quickForm]),
   ];
 
   /* ---------------- Step 3 ---------------- */
