@@ -34,7 +34,8 @@ export function mockTransport(): Transport {
   const clientId = Math.random().toString(36).slice(2, 10);
   return {
     kind: 'mock',
-    async join(code: string): Promise<RoomConn> {
+    async join(code: string, opts?: { watch?: boolean }): Promise<RoomConn> {
+      const watch = opts?.watch === true;
       const channel = new BroadcastChannel('w11mock');
       const treeCbs: ((t: Tree) => void)[] = [];
       const presenceCbs: ((n: number) => void)[] = [];
@@ -50,6 +51,10 @@ export function mockTransport(): Transport {
         presenceCbs.forEach((cb) => cb(countPresence(room)));
       };
       const beat = (): void => {
+        if (watch) {
+          emit();
+          return;
+        }
         const room = load(code);
         room.p[clientId] = Date.now();
         save(code, room);
@@ -94,10 +99,12 @@ export function mockTransport(): Transport {
         },
         close() {
           window.clearInterval(timer);
-          const room = load(code);
-          delete room.p[clientId];
-          save(code, room);
-          channel.postMessage({ code });
+          if (!watch) {
+            const room = load(code);
+            delete room.p[clientId];
+            save(code, room);
+            channel.postMessage({ code });
+          }
           channel.close();
         },
       };

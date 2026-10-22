@@ -22,6 +22,9 @@ export interface RoomConn {
 
 export interface Transport {
   readonly kind: 'firebase' | 'mock';
-  /** Join the room, creating it if it does not exist. Rejects with a readable Error on failure. */
-  join(code: string): Promise<RoomConn>;
+  /**
+   * Join the room, creating it if it does not exist. Rejects with a readable Error on failure.
+   * With `watch` the client only listens: it adds no presence and creates nothing (used by the tutor board).
+   */
+  join(code: string, opts?: { watch?: boolean }): Promise<RoomConn>;
 }

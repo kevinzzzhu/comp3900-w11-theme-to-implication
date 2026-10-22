@@ -9,6 +9,7 @@ import { h } from '../ui/dom';
 import { TimeLink, VideoChip } from '../ui/video';
 import { runSheet, sessionDecisions, themeDiagnosis, TUTOR_ONLY_MARK, videoTutorNotes } from './content';
 import { generateCode, prettyCode } from '../sync/config';
+import { mountBoard } from './board';
 import { buildGroups, groupsToText, parseRoster, type Student } from './groups';
 import { SessionTimer, type TimerView } from './timer';
 
@@ -163,6 +164,9 @@ export function mountTutor(_root: HTMLElement): void {
     groupOut,
   );
 
+  /* ---------- class board ---------- */
+  const board = mountBoard(() => currentCodes.map((code, i) => ({ label: `Group ${i + 1}`, code: code.replace(/[^A-Z0-9]/g, '') })));
+
   /* ---------- video notes ---------- */
   const videoPanel = h('div', { class: 'td-panel' });
   (Object.keys(videoTutorNotes) as VideoId[]).forEach((id) => {
@@ -177,6 +181,7 @@ export function mountTutor(_root: HTMLElement): void {
     ['Run sheet', runPanel],
     ['Themes', diagPanel],
     ['Groups', groupPanel],
+    ['Class board', board.el],
     ['Videos', videoPanel],
     ['Decisions', decisionPanel],
   ];

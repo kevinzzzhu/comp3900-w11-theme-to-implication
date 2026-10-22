@@ -43,7 +43,8 @@ function toTree(snap: DataSnapshot): Tree {
 export function firebaseTransport(settings: FirebaseSettings): Transport {
   return {
     kind: 'firebase',
-    async join(code: string): Promise<RoomConn> {
+    async join(code: string, opts?: { watch?: boolean }): Promise<RoomConn> {
+      const watch = opts?.watch === true;
       const fresh = getApps().length === 0;
       const app = fresh ? initializeApp(settings) : getApp();
       const auth = getAuth(app);
@@ -92,6 +93,7 @@ export function firebaseTransport(settings: FirebaseSettings): Transport {
           if (closed) return;
           closed = true;
           offs.splice(0).forEach((off) => off());
+          if (watch) return;
           void onDisconnect(myPresence).cancel().catch(() => undefined);
           remove(myPresence).catch(() => undefined);
         },
@@ -99,18 +101,22 @@ export function firebaseTransport(settings: FirebaseSettings): Transport {
 
       try {
         // Re-announce presence on every (re)connect; the server drops it when this client disappears.
-        offs.push(onValue(ref(db, '.info/connected'), (s) => {
-          if (s.val() !== true || closed) return;
-          void onDisconnect(myPresence).remove().then(() => set(myPresence, true)).catch(() => undefined);
-        }));
+        if (!watch) {
+          offs.push(onValue(ref(db, '.info/connected'), (s) => {
+            if (s.val() !== true || closed) return;
+            void onDisconnect(myPresence).remove().then(() => set(myPresence, true)).catch(() => undefined);
+          }));
+        }
         const first = new Promise<Tree>((resolve, reject) => {
           onValue(dRef, (s) => resolve(toTree(s)), (err) => reject(err), { onlyOnce: true });
         });
         conn.firstSnapshot = withTimeout(first, MSG_TIMEOUT);
         await conn.firstSnapshot;
         // createdAt is write-once (rules); a failure here is cosmetic, so it never blocks joining.
-        const created = ref(db, `${base}/meta/createdAt`);
-        await get(created).then((s) => (s.exists() ? undefined : set(created, serverTimestamp()))).catch(() => undefined);
+        if (!watch) {
+          const created = ref(db, `${base}/meta/createdAt`);
+          await get(created).then((s) => (s.exists() ? undefined : set(created, serverTimestamp()))).catch(() => undefined);
+        }
       } catch (e) {
         conn.close();
         const denied = e instanceof Error && /permission_denied/i.test(e.message);

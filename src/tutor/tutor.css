@@ -39,3 +39,21 @@
 .tutor-drawer.is-projector .td-seglabel { font-size: 1.6rem; }
 .tutor-drawer.is-projector .td-tabs, .tutor-drawer.is-projector .td-panels { display: none; }
 .td-code { font-weight: 700; letter-spacing: 0.08em; margin-left: 0.5em; font-variant-numeric: tabular-nums; }
+
+/* class board */
+.tb-codes { width: 100%; font: inherit; font-size: 0.9rem; padding: 8px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--bg); color: var(--text-strong); box-sizing: border-box; }
+.tb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-top: 12px; }
+.tb-card { border: 1px solid var(--border-strong); border-left-width: 6px; border-radius: 10px; padding: 10px 12px; background: var(--card); }
+.tb-card.is-done { border-left-color: #2e7d4f; }
+.tb-card.is-partial { border-left-color: #c48a1f; }
+.tb-card.is-empty { border-left-color: var(--border-strong); }
+.tb-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; margin-bottom: 6px; }
+.tb-code { font-variant-numeric: tabular-nums; letter-spacing: 0.08em; font-size: 0.85rem; color: var(--muted); }
+.tb-online { margin-left: auto; font-size: 0.8rem; color: var(--muted); }
+.tb-label { margin: 8px 0 2px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.tb-text { margin: 0; font-size: 0.95rem; color: var(--text-strong); white-space: pre-wrap; overflow-wrap: anywhere; }
+.tb-text.is-empty { color: var(--muted); font-style: italic; }
+.tb-meta { margin: 4px 0 0; font-size: 0.8rem; color: var(--muted); }
+.tb-root.is-full { position: fixed; inset: 0; z-index: 90; overflow: auto; padding: 20px; background: var(--bg); }
+.tb-root.is-full .tb-grid { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+.tb-root.is-full .tb-text { font-size: 1.15rem; }

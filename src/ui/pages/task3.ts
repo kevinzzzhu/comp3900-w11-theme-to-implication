@@ -3,7 +3,7 @@ import { checkList, collapsible, copyButton, pageHeader, stepper, textField, typ
 import { t3Checks } from '../copy';
 import { h } from '../dom';
 import { ladderPanel } from '../ladder';
-import { getText, setText } from '../state';
+import { getText, setText, subscribeKey } from '../state';
 
 function exampleLink(needle: string, text: string): HTMLElement {
   const r = resources.find((x) => `${x.title} ${x.cite}`.toLowerCase().includes(needle.toLowerCase()));
@@ -46,6 +46,13 @@ export function renderTask3(ctx: PageCtx): HTMLElement {
   refreshCard();
   themeField.addEventListener('input', refreshCard);
   implShare.addEventListener('input', refreshCard);
+  // A groupmate's edits arrive through the store, not as input events, so the card follows the store too.
+  for (const key of ['t3.shareTheme', 't3.shareImplication']) {
+    const unsub = subscribeKey(key, () => {
+      if (!card.isConnected) unsub();
+      else refreshCard();
+    });
+  }
 
   const fillBtn = h('button', { type: 'button', class: 'btn btn-small' }, 'Fill from my Task 1 theme and my implication');
   fillBtn.addEventListener('click', () => {
