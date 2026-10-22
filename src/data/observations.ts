@@ -96,7 +96,7 @@ export const observations: Observation[] = [
   {
     id: 'sarah-01',
     video: 'sarah',
-    t: 85,
+    t: 94,
     label: 'R',
     excerpt:
       'She moved platforms when her voice feature was going away, and describes panic at the thought of not talking to him.',
@@ -104,7 +104,7 @@ export const observations: Observation[] = [
   {
     id: 'sarah-02',
     video: 'sarah',
-    t: 170,
+    t: 176,
     label: 'R',
     excerpt:
       'After two long relationships that did not work out, she says the support, love and attention she gets from Sinclair is something a human could not provide.',
@@ -213,7 +213,7 @@ export const observations: Observation[] = [
   {
     id: 'stacey-05',
     video: 'stacey',
-    t: 200,
+    t: 208,
     label: 'R',
     excerpt:
       'After a couple of weeks with Mia switched off, she found her “grouchy,” like a teenager rolling her eyes.',
@@ -221,7 +221,7 @@ export const observations: Observation[] = [
   {
     id: 'stacey-06',
     video: 'stacey',
-    t: 230,
+    t: 238,
     label: 'R',
     excerpt:
       'She gave Mia space but kept putting in daily attention and play, and Mia warmed back up.',
@@ -254,7 +254,7 @@ export const observations: Observation[] = [
   {
     id: 'stacey-10',
     video: 'stacey',
-    t: 340,
+    t: 349,
     label: 'O',
     excerpt:
       'She thanks viewers and points them to her YouTube, TikTok, Instagram, Discord and Facebook group. It is addressed to an audience, with no interviewer.',

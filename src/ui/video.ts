@@ -7,6 +7,7 @@ const YT_ORIGIN = 'https://www.youtube-nocookie.com';
 interface EmbedHandle {
   root: HTMLElement;
   seek(sec: number): void;
+  pause(): void;
 }
 const embeds = new Map<VideoId, EmbedHandle>();
 
@@ -107,12 +108,13 @@ export function VideoEmbed(video: Video, opts: VideoEmbedOpts = {}): HTMLElement
     });
     clear(stage);
     stage.classList.add('is-loaded');
+    root.classList.add('is-active');
     stage.appendChild(iframe);
   };
 
   const loadBtn = h(
     'button',
-    { type: 'button', class: 'btn video-load', onClick: () => load(0) },
+    { type: 'button', class: 'btn video-load', onClick: () => seek(0) },
     h('span', { class: 'play-glyph', 'aria-hidden': 'true' }),
     ` Load video (${fmtTime(video.durationSec)})`,
   );
@@ -133,20 +135,25 @@ export function VideoEmbed(video: Video, opts: VideoEmbedOpts = {}): HTMLElement
     ),
   );
 
+  const send = (func: string, args: unknown[]) =>
+    iframe?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args }), YT_ORIGIN);
+
   const seek = (sec: number): void => {
+    // One video at a time: pause the others so audio never overlaps in class.
+    embeds.forEach((e, id) => {
+      if (id !== video.id) e.pause();
+    });
     openAncestorDetails(root);
     root.scrollIntoView({ behavior: prefersReduced() ? 'auto' : 'smooth', block: 'center' });
     if (!iframe) {
       load(sec);
       return;
     }
-    const send = (func: string, args: unknown[]) =>
-      iframe?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args }), YT_ORIGIN);
     send('seekTo', [sec, true]);
     send('playVideo', []);
   };
 
-  embeds.set(video.id, { root, seek });
+  embeds.set(video.id, { root, seek, pause: () => send('pauseVideo', []) });
   return root;
 }
 
