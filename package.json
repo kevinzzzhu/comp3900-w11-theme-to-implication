@@ -1,0 +1,21 @@
+{
+  "name": "week11-theme-to-implication",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --mode tutor",
+    "dev:student": "vite",
+    "build": "tsc --noEmit && vite build && bash scripts/check-no-tutor.sh",
+    "build:tutor": "tsc --noEmit && vite build --mode tutor --outDir dist-tutor",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.186.0",
+    "typescript": "~5.8.3",
+    "vite": "^6.3.5"
+  }
+}

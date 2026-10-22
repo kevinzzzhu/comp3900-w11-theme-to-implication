@@ -1,0 +1,13 @@
+@media print {
+  :root { --bg: #fff; --text: #000; --text-strong: #000; --muted: #333; --card: #fff; --tint: #eee; --header: #fff; --border: #999; --border-strong: #777; }
+  body { background: #fff; color: #000; font-size: 11pt; }
+  .site-header, .site-footer, .skip-link, .widget, .video-panel, .video-card .video-stage, .btn, .btn-row, .table-actions, .row-actions,
+  .copy-wrap, .pill-tabs, .add-form, .obs-list, .extensions, .share-wrap .btn, .menu, dialog, .saved, .flip-grid, .tutor-fab, .tutor-drawer { display: none !important; }
+  .main { max-width: none; padding: 0; }
+  .section { break-inside: avoid-page; margin: 1rem 0; }
+  textarea, input[type='text'] { border: 1px solid #777; overflow: visible; }
+  textarea { resize: none; }
+  a { color: #000; text-decoration: underline; }
+  .etable, .etable tbody, .etable tr, .etable td, .etable th { break-inside: avoid; }
+  details.panel > :not(summary) { display: block; }
+}
