@@ -6,3 +6,5 @@ dist-tutor/
 !.env.example
 .DS_Store
 *.log
+~$*
+.~lock.*
