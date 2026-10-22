@@ -14,6 +14,12 @@ const MSG_SIGN_IN = 'Could not sign in to the group service. Check your connecti
 const MSG_DENIED = 'The group service refused access to this room. Ask your tutor to check the database rules.';
 const MSG_TIMEOUT = 'The group service did not respond. Check your connection and try again.';
 
+/** A short code for the real cause, so a failure on someone's device can be diagnosed from the message alone. */
+function codeOf(e: unknown): string {
+  if (e && typeof e === 'object' && 'code' in e) return String((e as { code: unknown }).code);
+  return e instanceof Error ? e.message.slice(0, 80) : 'unknown';
+}
+
 function withTimeout<T>(p: Promise<T>, message: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
   const limit = new Promise<never>((_, reject) => {
@@ -58,10 +64,11 @@ export function firebaseTransport(settings: FirebaseSettings): Transport {
             await auth.authStateReady();
             return (auth.currentUser ?? (await signInAnonymously(auth)).user).uid;
           })(),
-          MSG_TIMEOUT,
+          `${MSG_TIMEOUT} (sign-in timed out)`,
         );
       } catch (e) {
-        throw e instanceof Error && e.message === MSG_TIMEOUT ? e : new Error(MSG_SIGN_IN);
+        console.error('Group room sign-in failed', e);
+        throw e instanceof Error && e.message.includes('sign-in timed out') ? e : new Error(`${MSG_SIGN_IN} (${codeOf(e)})`);
       }
 
       const db: Database = getDatabase(app);
@@ -110,7 +117,7 @@ export function firebaseTransport(settings: FirebaseSettings): Transport {
         const first = new Promise<Tree>((resolve, reject) => {
           onValue(dRef, (s) => resolve(toTree(s)), (err) => reject(err), { onlyOnce: true });
         });
-        conn.firstSnapshot = withTimeout(first, MSG_TIMEOUT);
+        conn.firstSnapshot = withTimeout(first, `${MSG_TIMEOUT} (database timed out)`);
         await conn.firstSnapshot;
         // createdAt is write-once (rules); a failure here is cosmetic, so it never blocks joining.
         if (!watch) {
@@ -119,8 +126,10 @@ export function firebaseTransport(settings: FirebaseSettings): Transport {
         }
       } catch (e) {
         conn.close();
+        console.error('Group room join failed', e);
         const denied = e instanceof Error && /permission_denied/i.test(e.message);
-        throw e instanceof Error && e.message === MSG_TIMEOUT ? e : new Error(denied ? MSG_DENIED : MSG_TIMEOUT);
+        const timedOut = e instanceof Error && e.message.includes('timed out');
+        throw timedOut ? e : new Error(denied ? `${MSG_DENIED} (permission_denied)` : `${MSG_TIMEOUT} (${codeOf(e)})`);
       }
       return conn;
     },
