@@ -89,22 +89,30 @@ export const resources: Resource[] = [
     verified: true,
   },
 
-  // AI
+  // AI (CHI venues; venue, authors and DOI checked against Crossref, abstracts read, full texts not)
   {
     group: 'ai',
-    title: 'We reject the use of generative artificial intelligence for reflexive qualitative research',
-    cite: 'Jowsey, T., Braun, V., Clarke, V., Lupton, D. & Fine, M. (2025). Qualitative Inquiry.',
-    url: doi('10.1177/10778004251401851'),
-    why: 'Sets out why the originators of RTA think generative AI cannot do reflexive interpretation.',
+    title: 'Large Language Models in Qualitative Research: Uses, Tensions, and Intentions',
+    cite: 'Schroeder, H., Aubin Le Quéré, M., Randazzo, C., Mimno, D. & Schoenebeck, S. (2025). CHI 2025, pp. 1-17.',
+    url: doi('10.1145/3706598.3713120'),
+    why: 'Interviews with 20 qualitative researchers on where LLMs fit in their practice, and the ethical and methodological tensions that raises.',
     verified: true,
   },
   {
     group: 'ai',
-    title: 'Performing an inductive thematic analysis of semi-structured interviews with a large language model',
-    cite: 'De Paoli, S. (2024). Social Science Computer Review, 42(4), 997-1019.',
-    url: doi('10.1177/08944393231220483'),
-    why: 'The counter-position: an exploration of what an LLM can produce, useful to compare against Jowsey et al.',
-    verified: false,
+    title: 'Human-AI Collaboration in Thematic Analysis using ChatGPT: A User Study and Design Recommendations',
+    cite: 'Yan, L., Echeverria, V., Fernandez-Nieto, G. M., Jin, Y., Swiecki, Z., Zhao, L., Gasevic, D. & Martinez-Maldonado, R. (2024). CHI EA 2024, pp. 1-7.',
+    url: doi('10.1145/3613905.3650732'),
+    why: 'Ten qualitative researchers used ChatGPT for thematic analysis: helpful for speed and first-pass exploration, with worries about trust, accuracy and limited context.',
+    verified: true,
+  },
+  {
+    group: 'ai',
+    title: 'Towards Better Reflexive Thematic Analysis in HCI: A Scoping Review of Practice at CHI',
+    cite: 'Rigby, J. M. & Iacovides, I. (2026). CHI 2026, pp. 1-18.',
+    url: doi('10.1145/3772318.3790417'),
+    why: 'Reviews 147 CHI papers that claim reflexive thematic analysis and finds poorly conceptualised themes are common, with no AI involved.',
+    verified: true,
   },
 
   // Reflexivity

@@ -91,8 +91,8 @@ export function renderExtensions(): HTMLElement {
       'details',
       { class: 'panel' },
       h('summary', null, 'Why do LLM-style themes read as superficial?'),
-      h('p', null, 'Themes produced by prompting a language model often read like lists of topics: frequent subjects, tidy labels, no claim about what holds them together. A reflexive analysis expects a researcher to interpret, and to be accountable for the position they interpret from. Two sources on the course list discuss this from different angles; read them yourself before you cite either.'),
-      h('ul', { class: 'resource-list' }, sourceLine('Jowsey', 'Jowsey 2025'), sourceLine('De Paoli', 'De Paoli 2024')),
+      h('p', null, 'Themes produced by prompting a language model often read like lists of topics: frequent subjects, tidy labels, no claim about what holds them together. A reflexive analysis expects a researcher to interpret, and to be accountable for the position they interpret from. Three CHI papers look at this from different angles: how researchers weigh up LLMs, what ChatGPT-assisted thematic analysis looked like in a user study, and how often themes in published CHI work are thin with no AI involved. Read them yourself before you cite any of them.'),
+      h('ul', { class: 'resource-list' }, sourceLine('Uses, Tensions', 'Schroeder et al. 2025'), sourceLine('Human-AI Collaboration in Thematic', 'Yan et al. 2024'), sourceLine('Reflexive Thematic Analysis in HCI', 'Rigby and Iacovides 2026')),
       h(
         'p',
         null,
