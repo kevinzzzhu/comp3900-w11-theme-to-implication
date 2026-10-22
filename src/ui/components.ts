@@ -312,6 +312,147 @@ export function mountScene<T extends SceneHandle>(ctx: PageCtx, panel: WidgetPan
   }
 }
 
+/** Mount a scene the first time its stage is actually visible (not in a hidden step or closed <details>). */
+export interface LazyScene<T> {
+  get(): T | null;
+  /** run now if mounted, otherwise as soon as it mounts */
+  ready(fn: (handle: T) => void): void;
+}
+
+/** Scenes waiting for their stage to be displayed (not inside a hidden step or a closed <details>). */
+const pendingScenes = new Set<() => boolean>();
+
+/** Mount every pending scene whose stage is now laid out. Safe to call often. */
+export function flushPendingScenes(): void {
+  for (const attempt of [...pendingScenes]) {
+    if (attempt()) pendingScenes.delete(attempt);
+  }
+}
+
+document.addEventListener('toggle', () => flushPendingScenes(), true);
+
+export function mountWhenVisible<T extends SceneHandle>(ctx: PageCtx, panel: WidgetPanel, make: (el: HTMLElement) => T): LazyScene<T> {
+  let handle: T | null = null;
+  const queue: ((h: T) => void)[] = [];
+  if (panel.canMount) {
+    const attempt = (): boolean => {
+      if (!panel.stage.isConnected) return false;
+      if (panel.stage.getClientRects().length === 0) return false; // display:none somewhere above
+      handle = mountScene(ctx, panel, make);
+      if (handle) queue.splice(0).forEach((fn) => fn(handle as T));
+      return true;
+    };
+    pendingScenes.add(attempt);
+    ctx.afterMount(flushPendingScenes);
+    ctx.onDispose(() => pendingScenes.delete(attempt));
+  }
+  return {
+    get: () => handle,
+    ready(fn) {
+      if (handle) fn(handle);
+      else queue.push(fn);
+    },
+  };
+}
+
+/** A closed-by-default section for secondary material. */
+export function collapsible(summary: string, children: Child[], opts: { open?: boolean; className?: string } = {}): HTMLDetailsElement {
+  const d = h('details', { class: `panel ${opts.className ?? ''}`.trim() }, h('summary', null, summary), ...children) as HTMLDetailsElement;
+  if (opts.open) d.open = true;
+  return d;
+}
+
+/* ---------- stepper: one step on screen at a time ---------- */
+
+export interface StepDef {
+  title: string;
+  minutes?: number;
+  mode?: 'Individual' | 'Group' | 'Whole class';
+  body: Child[];
+}
+
+export function stepper(key: string, steps: StepDef[], finish?: Child, onShow?: (i: number) => void): HTMLElement {
+  const storeKey = `w11:ui.step.${key}`;
+  let current = 0;
+  try {
+    const saved = Number(localStorage.getItem(storeKey));
+    if (Number.isInteger(saved) && saved >= 0 && saved < steps.length) current = saved;
+  } catch {
+    /* storage unavailable: start at the first step */
+  }
+
+  const root = h('div', { class: 'stepper' });
+  const navButtons: HTMLButtonElement[] = [];
+  const panels: HTMLElement[] = [];
+
+  const nav = h('ol', { class: 'step-nav', 'aria-label': 'Steps' });
+  steps.forEach((st, i) => {
+    const b = h(
+      'button',
+      { type: 'button', class: 'step-tab', onClick: () => show(i, true) },
+      h('span', { class: 'step-num', 'aria-hidden': 'true' }, String(i + 1)),
+      h('span', { class: 'step-tab-text' }, h('strong', null, st.title), st.minutes ? h('small', null, `${st.minutes} min${st.mode ? ` · ${st.mode}` : ''}`) : null),
+    );
+    navButtons.push(b);
+    nav.append(h('li', null, b));
+  });
+  root.append(nav);
+
+  steps.forEach((st, i) => {
+    const last = i === steps.length - 1;
+    const foot = h(
+      'div',
+      { class: 'step-foot' },
+      i > 0 ? h('button', { type: 'button', class: 'btn', onClick: () => show(i - 1, true) }, 'Back') : h('span'),
+      last
+        ? (finish ?? h('span'))
+        : h('button', { type: 'button', class: 'btn btn-primary', onClick: () => show(i + 1, true) }, `Next: ${steps[i + 1].title}`),
+    );
+    const heading = h('h2', { tabindex: -1 }, st.title);
+    const panel = h(
+      'section',
+      { class: 'step-panel', 'aria-label': st.title },
+      h(
+        'div',
+        { class: 'step-head' },
+        heading,
+        st.minutes ? h('p', { class: 'step-meta' }, h('span', { class: 'pill' }, `${st.minutes} min`), st.mode ? h('span', { class: 'pill pill-alt' }, st.mode) : null) : null,
+      ),
+      ...st.body,
+      foot,
+    );
+    panel.hidden = true;
+    panels.push(panel);
+    root.append(panel);
+  });
+
+  function show(i: number, move: boolean): void {
+    current = i;
+    panels.forEach((p, k) => {
+      p.hidden = k !== i;
+    });
+    navButtons.forEach((b, k) => {
+      if (k === i) b.setAttribute('aria-current', 'step');
+      else b.removeAttribute('aria-current');
+      b.classList.toggle('is-done', k < i);
+    });
+    try {
+      localStorage.setItem(storeKey, String(i));
+    } catch {
+      /* ignore */
+    }
+    onShow?.(i);
+    growAll(panels[i]);
+    flushPendingScenes();
+    if (move) {
+      root.scrollIntoView({ behavior: 'auto', block: 'start' });
+      (panels[i].querySelector('h2') as HTMLElement | null)?.focus({ preventScroll: true });
+    }
+  }
+  show(current, false);
+  return root;
+}
+
 /* ---------- clipboard / download ---------- */
 
 export async function copyText(text: string): Promise<boolean> {

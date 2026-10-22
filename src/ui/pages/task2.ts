@@ -1,9 +1,9 @@
 import { criteria, themes } from '../../data/themes';
 import { videos } from '../../data/videos';
-import { mountCrystal, type CrystalHandle } from '../../scenes/crystal';
+import { mountCrystal } from '../../scenes/crystal';
 import type { CandidateTheme } from '../../types';
 import {
-  boundTextarea, checkList, editableTable, mountScene, pageHeader, quoteBox, stepHeader, textField, widgetPanel, type PageCtx,
+  boundTextarea, checkList, collapsible, editableTable, mountWhenVisible, pageHeader, stepper, textField, widgetPanel, type PageCtx,
 } from '../components';
 import { labelMeaning, matrixRows, t2Prompts } from '../copy';
 import { h } from '../dom';
@@ -37,20 +37,12 @@ export function renderTask2(ctx: PageCtx): HTMLElement {
   const themeB = themes.find((t) => t.id === 'B');
   const root = h('div', { class: 'page' });
 
-  root.append(
-    pageHeader(
-      'Task 2: Critiquing and refining themes',
-      'Two tutor-prepared themes are on the table, built from the same three videos. Judge them, strengthen the weaker one, then go back to your own.',
-    ),
-    VideoPanel(),
-    h(
-      'section',
-      { class: 'section' },
-      h('h2', null, 'The two themes'),
-      h('p', { class: 'small muted' }, 'Evidence rows show the video, a label (O observed, R reported, I interpretation) and a timestamp you can click to check the moment.'),
-      h('div', { class: 'grid-2' }, themeCard('Theme A', themeA), themeCard('Theme B', themeB)),
-    ),
+  const themesPanel = collapsible(
+    'The two themes (O observed, R reported, I interpretation)',
+    [h('div', { class: 'grid-2' }, themeCard('Theme A', themeA), themeCard('Theme B', themeB))],
+    { open: true },
   );
+  root.append(pageHeader('Task 2: Critiquing and refining themes', 'Judge two themes, strengthen the weaker one, then go back to your own.'), VideoPanel(), themesPanel);
 
   /* ---------- Step 1 ---------- */
   const matrix = editableTable({
@@ -62,11 +54,7 @@ export function renderTask2(ctx: PageCtx): HTMLElement {
     defaultRows: matrixRows.map((r) => [r, '', '']),
   });
 
-  const crystalPanel = widgetPanel(
-    'Theme Crystal',
-    'A stack of six layers, one per quality criterion. A layer lights up and turns solid when you tick the matching criterion, so a well-supported theme grows into a tall crystal and a thin one stays a flat slab.',
-  );
-  let crystal: CrystalHandle | null = null;
+  const crystalPanel = widgetPanel('Theme Crystal', 'Tick the criteria a theme meets and its layers light up. A thin theme stays a flat slab.');
   type Which = 'A' | 'B' | 'mine';
   const keyOf: Record<Which, string> = { A: 't2.crystalA', B: 't2.crystalB', mine: 't2.crystalMine' };
   const labelOf: Record<Which, string> = { A: 'Theme A', B: 'Theme B', mine: "My group's theme" };
@@ -74,18 +62,20 @@ export function renderTask2(ctx: PageCtx): HTMLElement {
   const checkHost = h('div');
   const tabButtons = new Map<Which, HTMLButtonElement>();
   const tabs = h('div', { class: 'pill-tabs', role: 'group', 'aria-label': 'Choose which theme to rate' });
+  const crystal = mountWhenVisible(ctx, crystalPanel, (el) => mountCrystal(el, criteria.map((c) => c.label)));
 
   const select = (w: Which): void => {
     which = w;
     tabButtons.forEach((b, k) => b.setAttribute('aria-pressed', String(k === w)));
-    crystal?.setTheme(w);
-    crystal?.setLit(getChecks(keyOf[w], criteria.length));
+    const c = crystal.get();
+    c?.setTheme(w);
+    c?.setLit(getChecks(keyOf[w], criteria.length));
     checkHost.replaceChildren(
       criteria.length
-        ? checkList(keyOf[w], criteria.map((c) => c.label), {
+        ? checkList(keyOf[w], criteria.map((c2) => c2.label), {
             legend: `Criteria met by ${labelOf[w]}`,
             describe: (i) => criteria[i].prompt,
-            onChange: (state) => crystal?.setLit(state),
+            onChange: (state) => crystal.get()?.setLit(state),
           })
         : h('p', { class: 'muted' }, 'Criteria have not loaded.'),
     );
@@ -96,51 +86,50 @@ export function renderTask2(ctx: PageCtx): HTMLElement {
     tabs.append(b);
   });
   crystalPanel.el.append(tabs, checkHost);
+  crystal.ready(() => select(which));
   select('A');
 
-  root.append(
-    h(
-      'section',
-      { class: 'section' },
-      stepHeader('Step 1', 'Critique the themes', 10, 'Group'),
-      h('p', null, 'Fill the matrix for both themes. Quote timestamps when you cite evidence, and say what an alternative reading of that evidence could be.'),
-      matrix.el,
-      h('p', { class: 'hint' }, 'As you decide which theme is more convincing, consider how your own assumptions (see Task 1) affect that judgement.'),
-      textField({ key: 't2.positionality', label: 'How might your own assumptions affect which theme you find convincing?', rows: 3 }),
-      crystalPanel.el,
-    ),
-  );
+  const step1 = [
+    h('p', { class: 'instruction' }, 'Fill the matrix for both themes. Cite timestamps, and say how else the evidence could be read.'),
+    matrix.el,
+    textField({ key: 't2.positionality', label: 'How might your own assumptions affect which theme you find convincing?', rows: 3 }),
+    collapsible('Optional: rate each theme against six criteria', [crystalPanel.el]),
+  ];
 
   /* ---------- Step 2 ---------- */
+  const step2 = [
+    h('p', { class: 'instruction' }, 'Revise the weaker theme: its name, central concept, evidence or interpretation.'),
+    textField({ key: 't2.weaker', label: 'Which theme did your group judge weaker?', single: true, placeholder: 'Theme A or Theme B' }),
+    textField({ key: 't2.revName', label: 'Revised theme name', single: true }),
+    textField({ key: 't2.revConcept', label: 'Central organising concept', rows: 2 }),
+    textField({ key: 't2.revEvidence', label: 'Evidence (with timestamps)', rows: 3 }),
+    textField({ key: 't2.revInterp', label: 'Interpretation: what does the theme say is going on?', rows: 3 }),
+    collapsible('Test your revision against five questions', [h('ol', { class: 'prompt-list' }, t2Prompts.map((p, i) => h('li', null, h('p', null, p), boundTextarea(`t2.q${i + 1}`, p, 2))))]),
+  ];
+
+  /* ---------- Step 3 ---------- */
+  const step3 = [
+    h('p', { class: 'instruction' }, 'Go back to your Task 1 theme. What did Theme A, Theme B and your revision teach you about it?'),
+    textField({ key: 't2.keepChange', label: 'One change that would strengthen your original theme', rows: 2 }),
+    textField({ key: 't2.keepWhy', label: 'Why would that change help?', rows: 2 }),
+    textField({ key: 't2.keepShift', label: 'Has your understanding of the interviews, or of your own assumptions, changed?', rows: 3 }),
+  ];
+
   root.append(
-    h(
-      'section',
-      { class: 'section' },
-      stepHeader('Step 2', 'Refine the weaker theme', 10, 'Group'),
-      textField({ key: 't2.weaker', label: 'Which theme did your group judge weaker?', single: true, placeholder: 'Theme A or Theme B' }),
-      textField({ key: 't2.revName', label: 'Revised theme name', single: true }),
-      textField({ key: 't2.revConcept', label: 'Central organising concept', rows: 2 }),
-      textField({ key: 't2.revEvidence', label: 'Evidence (with timestamps)', rows: 3 }),
-      textField({ key: 't2.revInterp', label: 'Interpretation: what does the theme say is going on?', rows: 3 }),
-      h('h3', null, 'Test your revision'),
-      h('ol', { class: 'prompt-list' }, t2Prompts.map((p, i) => h('li', null, h('p', null, p), boundTextarea(`t2.q${i + 1}`, p, 2)))),
-    ),
-    h(
-      'section',
-      { class: 'section' },
-      stepHeader('Step 3', 'Revisit your original theme', 5, 'Group'),
-      quoteBox('Go back to the candidate theme you wrote in Task 1 and ask what Theme A, Theme B and your revision taught you.'),
-      textField({ key: 't2.keepChange', label: 'One change that would strengthen your original theme', rows: 2 }),
-      textField({ key: 't2.keepWhy', label: 'Why would that change help?', rows: 2 }),
-      textField({ key: 't2.keepShift', label: 'Has your understanding of the interviews, or of your own assumptions, changed?', rows: 3 }),
-      h('p', null, h('a', { class: 'btn btn-primary', href: '#/task-3' }, 'On to Task 3')),
+    stepper(
+      'task2',
+      [
+        { title: 'Critique', minutes: 10, mode: 'Group', body: step1 },
+        { title: 'Refine', minutes: 10, mode: 'Group', body: step2 },
+        { title: 'Revisit yours', minutes: 5, mode: 'Group', body: step3 },
+      ],
+      h('a', { class: 'btn btn-primary', href: '#/task-3' }, 'On to Task 3'),
+      // Themes are open for the critique and tucked away once you move on to your own theme.
+      (i) => {
+        themesPanel.open = i < 2;
+      },
     ),
   );
-
-  ctx.afterMount(() => {
-    crystal = mountScene(ctx, crystalPanel, (el) => mountCrystal(el, criteria.map((c) => c.label)));
-    select(which);
-  });
 
   return root;
 }

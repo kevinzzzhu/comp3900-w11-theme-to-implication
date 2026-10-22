@@ -1,11 +1,11 @@
 import { lensObservationIds, lenses } from '../../data/lenses';
 import { observations } from '../../data/observations';
 import { videos } from '../../data/videos';
-import { mountGalaxy, type GalaxyHandle } from '../../scenes/galaxy';
-import { mountPrism, type PrismHandle } from '../../scenes/prism';
+import { mountGalaxy } from '../../scenes/galaxy';
+import { mountPrism } from '../../scenes/prism';
 import type { Label, Observation, VideoId } from '../../types';
 import {
-  boundTextarea, editableTable, mountScene, pageHeader, quoteBox, stepHeader, textField, widgetPanel, type PageCtx,
+  boundTextarea, collapsible, editableTable, mountWhenVisible, pageHeader, quoteBox, stepper, textField, widgetPanel, type PageCtx,
 } from '../components';
 import { LENS_COLORS, labelMeaning, t1ClusterCols, t1CodeCols, t1Discussion } from '../copy';
 import { fmtTime, h, parseTime, uid } from '../dom';
@@ -37,13 +37,7 @@ function loadMine(): Observation[] {
 
 export function renderTask1(ctx: PageCtx): HTMLElement {
   const root = h('div', { class: 'page' });
-  root.append(
-    pageHeader(
-      'Task 1: From observations to themes',
-      'Start from what you noticed, name it with a code, then work with your group towards a candidate theme. About 25 minutes in total.',
-    ),
-    VideoPanel(),
-  );
+  root.append(pageHeader('Task 1: From observations to themes', 'Code your video, cluster with your group, then draft a candidate theme.'), VideoPanel());
 
   /* ---------------- Step 1 ---------------- */
   const codeTable = editableTable({
@@ -56,20 +50,20 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
     placeholders: ['e.g. Simon 3:25, says the chair "is part of me"', 'A short label', 'What in the moment led to this code?'],
   });
 
-  const prismPanel = widgetPanel(
-    'Lens Prism',
-    'A prism that splits one beam of white light into coloured beams, one colour per interpretive lens. It shows that the same observations can be coded differently depending on the assumptions you bring.',
-  );
+  const prismPanel = widgetPanel('Lens Prism', 'The same observations, coded through different assumptions.');
   const lensDetail = h('div', { class: 'lens-detail', 'aria-live': 'polite' });
   const lensRadioName = uid('lens');
   const lensOptions: HTMLElement[] = [];
-  let prism: PrismHandle | null = null;
+  let currentLens = -1;
+  const prism = mountWhenVisible(ctx, prismPanel, (el) => mountPrism(el, lenses.map((_, i) => LENS_COLORS[i % LENS_COLORS.length])));
+  prism.ready((p) => p.setLens(currentLens));
 
   const showLens = (i: number): void => {
-    prism?.setLens(i);
+    currentLens = i;
+    prism.get()?.setLens(i);
     lensDetail.replaceChildren();
     if (i < 0 || !lenses[i]) {
-      lensDetail.append(h('p', { class: 'muted' }, 'No lens selected. Pick one to see what it would make of the same observations.'));
+      lensDetail.append(h('p', { class: 'muted' }, 'Pick a lens to see what it would code.'));
       return;
     }
     const lens = lenses[i];
@@ -86,51 +80,36 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
     lensDetail.append(list.children.length ? list : h('p', { class: 'muted' }, 'No codes for this lens yet.'));
   };
 
-  const mkOption = (value: number, title: string, sub?: string, color?: string): HTMLElement => {
+  const mkOption = (value: number, title: string, color?: string): HTMLElement => {
     const id = uid('lo');
     const input = h('input', { type: 'radio', name: lensRadioName, id, checked: value === -1 });
     input.addEventListener('change', () => showLens(value));
-    return h(
-      'div',
-      { class: 'radio-row' },
-      input,
-      h('label', { for: id }, color ? h('span', { class: 'swatch', style: `background:${color}`, 'aria-hidden': 'true' }) : null, h('strong', null, title), sub ? h('span', { class: 'check-desc' }, sub) : null),
-    );
+    return h('div', { class: 'radio-row' }, input, h('label', { for: id }, color ? h('span', { class: 'swatch', style: `background:${color}`, 'aria-hidden': 'true' }) : null, h('strong', null, title)));
   };
-  lensOptions.push(mkOption(-1, 'No lens (white light)', 'Code the way you normally would.'));
-  lenses.forEach((l, i) => lensOptions.push(mkOption(i, l.name, l.assumption, LENS_COLORS[i % LENS_COLORS.length])));
-
+  lensOptions.push(mkOption(-1, 'No lens'));
+  lenses.forEach((l, i) => lensOptions.push(mkOption(i, l.name, LENS_COLORS[i % LENS_COLORS.length])));
   const lensPicker = h('fieldset', { class: 'lens-picker' }, h('legend', null, 'Choose a lens'), lensOptions);
-  const prismSide = lenses.length ? [lensPicker, lensDetail] : [h('p', { class: 'muted' }, 'Lens details have not loaded.')];
-  prismPanel.el.append(...prismSide);
+  prismPanel.el.append(...(lenses.length ? [lensPicker, lensDetail] : [h('p', { class: 'muted' }, 'Lens details have not loaded.')]));
   showLens(-1);
 
-  root.append(
-    h(
-      'section',
-      { class: 'section' },
-      stepHeader('Step 1', 'Individual coding', 10, 'Individual'),
-      h('p', null, 'Watch your video and note moments that stand out. First write down what you assume going in; then code 3-5 moments. A code is a short label for what a moment seems to be about.'),
-      textField({
-        key: 't1.assumptions',
-        label: 'What assumptions do you bring to this topic?',
-        hint: 'About technology, disability, companionship, AI, whatever applies. Be honest; this is for you, and it is the raw material of reflexivity.',
-        rows: 3,
-      }),
-      h(
-        'div',
-        { class: 'split' },
-        h('div', { class: 'split-main' }, h('h3', null, 'Code table'), codeTable.el),
-        h('div', { class: 'split-side' }, prismPanel.el),
-      ),
-      h('h3', null, 'Reflexivity prompt'),
-      h('p', null, 'Look at the lens that differs most from your own assumptions. Would it have led you to notice or code something different?'),
-      textField({ key: 't1.lensNote', label: 'Which lens is closest to the way you coded, and what might another lens have made you notice?', rows: 3 }),
-    ),
-  );
+  const step1 = [
+    h('p', { class: 'instruction' }, 'Code 3-5 moments from your video. A code is a short label for what a moment is about.'),
+    textField({
+      key: 't1.assumptions',
+      label: 'What assumptions do you bring to this topic?',
+      hint: 'Honest notes here are the raw material of reflexivity.',
+      rows: 3,
+    }),
+    h('h3', null, 'Code table'),
+    codeTable.el,
+    collapsible('Optional: see how a different lens would code it', [
+      prismPanel.el,
+      textField({ key: 't1.lensNote', label: 'Which lens is closest to how you coded, and what might another lens have made you notice?', rows: 3 }),
+    ]),
+  ];
 
   /* ---------------- Step 2 ---------------- */
-  const cardHost = h('div', { class: 'obs-card-host', 'aria-live': 'polite' }, h('p', { class: 'muted' }, 'Click an orb, or choose an observation from the list below, to read it here.'));
+  const cardHost = h('div', { class: 'obs-card-host', 'aria-live': 'polite' }, h('p', { class: 'muted' }, 'Click an orb to read it here.'));
 
   const showCard = (o: Observation): void => {
     const v = videos.find((x) => x.id === o.video);
@@ -146,11 +125,10 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
       h(
         'article',
         { class: 'obs-card', style: `--vc:${v?.color ?? '#888'}` },
-        h('header', null, VideoChip(o.video), ' ', TimeLink(o.video, o.t), ' ', labelBadge(o.label), h('span', { class: 'small' }, ` ${m.name} (${m.shape})`)),
+        h('header', null, VideoChip(o.video), ' ', TimeLink(o.video, o.t), ' ', labelBadge(o.label), h('span', { class: 'small' }, ` ${m.name}`)),
         quoteBox(o.excerpt),
-        h('p', { class: 'small' }, m.text),
-        inWin === false ? h('p', { class: 'note-warn small' }, 'Check the format note: this moment may not be the participant speaking, so it may not count as participant data.') : null,
-        o.checkAgainstVideo ? h('p', { class: 'note-warn small' }, 'This wording comes from auto-captions. Check it against the video before you rely on it.') : null,
+        inWin === false ? h('p', { class: 'note-warn small' }, 'May not be the participant speaking, so it may not count as participant data.') : null,
+        o.checkAgainstVideo ? h('p', { class: 'note-warn small' }, 'Wording is from auto-captions. Check it against the video.') : null,
         addBtn,
       ),
     );
@@ -168,14 +146,12 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
   };
   observations.forEach(addToList);
 
-  const galaxyPanel = widgetPanel(
-    'Observation Galaxy',
-    'A cloud of floating orbs, one per observation. Colour shows the video (teal Simon, rose Sarah, amber Stacey) and shape shows the label (sphere observed, cube reported, octahedron interpretation). Drag orbs together to cluster them; click one to read it.',
-  );
-  let galaxy: GalaxyHandle | null = null;
+  const galaxyPanel = widgetPanel('Observation Galaxy', 'Drag orbs together to cluster them. Colour is the video; shape is the label (sphere O, cube R, octahedron I).');
+  const galaxy = mountWhenVisible(ctx, galaxyPanel, (el) => mountGalaxy(el, observations, { onSelect: showCard }));
 
   const mine = loadMine();
   mine.forEach(addToList);
+  mine.forEach((o) => galaxy.ready((g) => g.addOrb(o)));
 
   /* add-my-observation form */
   const formMsg = h('p', { class: 'small', role: 'status', 'aria-live': 'polite' });
@@ -185,9 +161,7 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
   const inText = h('input', { id: 'my-excerpt', type: 'text', placeholder: 'Paraphrase, or a quote of 15 words or fewer', autocomplete: 'off' });
   const form = h(
     'form',
-    { class: 'panel add-form', novalidate: true },
-    h('h3', null, 'Add my observation'),
-    h('p', { class: 'small muted' }, 'Add a moment you noticed that is not in the cloud. It appears as a new orb and is saved with your answers. Orbs you add stay until you reload.'),
+    { class: 'add-form', novalidate: true },
     h(
       'div',
       { class: 'form-grid' },
@@ -221,11 +195,11 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
     rows.push([selVideo.value, fmtTime(t), selLabel.value, text]);
     setRows(MY_OBS_KEY, rows);
     const o: Observation = { id: `mine-${rows.length}`, video: selVideo.value as VideoId, t, label: selLabel.value as Label, excerpt: text };
-    galaxy?.addOrb(o);
+    galaxy.ready((g) => g.addOrb(o));
     addToList(o);
     inText.value = '';
     inTime.value = '';
-    formMsg.textContent = 'Added. It is now in the list below the cloud' + (galaxy ? ' and in the galaxy.' : '.');
+    formMsg.textContent = 'Added to the list and the galaxy.';
   });
 
   const clusterTable = editableTable({
@@ -236,41 +210,37 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
     addLabel: 'Add a cluster',
   });
 
-  root.append(
-    h(
-      'section',
-      { class: 'section' },
-      stepHeader('Step 2', 'Share and cluster', 8, 'Group'),
-      h('p', null, 'Each member introduces their video and shares 2-3 observations and the codes they gave them. Then talk through these prompts, jotting anything worth keeping.'),
-      h('ol', { class: 'prompt-list' }, t1Discussion.map((p, i) => h('li', null, h('p', null, p), boundTextarea(`t1.d${i + 1}`, p, 2)))),
-      h('h3', null, 'Cluster table'),
-      h('p', { class: 'small muted' }, 'Group observations and codes that seem to belong together, then say what holds each cluster together.'),
-      clusterTable.el,
-      h('div', { class: 'split split-even' }, h('div', { class: 'split-main' }, galaxyPanel.el, h('details', { class: 'panel' }, h('summary', null, 'Browse observations as a list (keyboard friendly)'), observations.length ? obsList : h('p', { class: 'muted' }, 'Observations have not loaded.'))), h('div', { class: 'split-side' }, cardHost, form)),
-    ),
-  );
+  const step2 = [
+    h('p', { class: 'instruction' }, 'Take turns introducing your video and sharing 2-3 observations with their codes. Then group what belongs together.'),
+    h('h3', null, 'Cluster table'),
+    clusterTable.el,
+    h('div', { class: 'split split-even' }, h('div', { class: 'split-main' }, galaxyPanel.el), h('div', { class: 'split-side' }, cardHost)),
+    collapsible('Discussion prompts', [h('ol', { class: 'prompt-list' }, t1Discussion.map((p, i) => h('li', null, h('p', null, p), boundTextarea(`t1.d${i + 1}`, p, 2))))]),
+    collapsible('Browse all observations as a list', [observations.length ? obsList : h('p', { class: 'muted' }, 'Observations have not loaded.')]),
+    collapsible('Add an observation of your own', [form]),
+  ];
 
   /* ---------------- Step 3 ---------------- */
+  const step3 = [
+    h('p', { class: 'instruction' }, 'Draft one candidate theme together. You will test it in Task 2 and build on it in Task 3, so keep it.'),
+    textField({ key: 't1.themeName', label: 'Working name for the theme', single: true, placeholder: 'A short phrase that carries the idea' }),
+    textField({ key: 't1.themeConcept', label: 'Central organising concept', hint: 'The one idea that ties the observations together.', rows: 2 }),
+    textField({ key: 't1.themeObs', label: '2-3 supporting observations', hint: 'Ideally from different videos, with timestamps.', rows: 3 }),
+    textField({ key: 't1.themeHelps', label: 'What does this theme help us understand?', rows: 3 }),
+    collapsible('What makes it a theme?', [quoteBox('A pattern of shared meaning organised around a central concept. It interprets what people said rather than summarising it.')]),
+  ];
+
   root.append(
-    h(
-      'section',
-      { class: 'section' },
-      stepHeader('Step 3', 'Candidate theme', 7, 'Group'),
-      quoteBox('A theme is a pattern of shared meaning organised around a central concept. It interprets what people said, rather than summarising it.'),
-      h('p', null, 'Draft one candidate theme together, ideally supported by observations from different videos. You will test it in Task 2 and build an implication from it in Task 3, so keep it.'),
-      textField({ key: 't1.themeName', label: 'Working name for the theme', single: true, placeholder: 'A short phrase that carries the idea' }),
-      textField({ key: 't1.themeConcept', label: 'Central organising concept', hint: 'The one idea that ties the observations together.', rows: 2 }),
-      textField({ key: 't1.themeObs', label: '2-3 supporting observations', hint: 'Ideally from different videos. Include timestamps.', rows: 3 }),
-      textField({ key: 't1.themeHelps', label: 'What does this theme help us understand?', rows: 3 }),
-      h('p', null, h('a', { class: 'btn btn-primary', href: '#/task-2' }, 'On to Task 2')),
+    stepper(
+      'task1',
+      [
+        { title: 'Code', minutes: 10, mode: 'Individual', body: step1 },
+        { title: 'Share and cluster', minutes: 8, mode: 'Group', body: step2 },
+        { title: 'Candidate theme', minutes: 7, mode: 'Group', body: step3 },
+      ],
+      h('a', { class: 'btn btn-primary', href: '#/task-2' }, 'On to Task 2'),
     ),
   );
-
-  ctx.afterMount(() => {
-    prism = mountScene(ctx, prismPanel, (el) => mountPrism(el, lenses.map((_, i) => LENS_COLORS[i % LENS_COLORS.length])));
-    galaxy = mountScene(ctx, galaxyPanel, (el) => mountGalaxy(el, observations, { onSelect: showCard }));
-    mine.forEach((o) => galaxy?.addOrb(o));
-  });
 
   return root;
 }

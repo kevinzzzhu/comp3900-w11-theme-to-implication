@@ -125,8 +125,7 @@ export function VideoEmbed(video: Video, opts: VideoEmbedOpts = {}): HTMLElement
     { class: `video-card${opts.compact ? ' is-compact' : ''}`, style: `--vc:${video.color}`, 'data-video': video.id },
     h('header', { class: 'video-head' }, h('span', { class: 'vdot', 'aria-hidden': 'true' }), h('h3', null, `${video.person}: ${video.title}`), h('span', { class: 'pill' }, fmtTime(video.durationSec))),
     h('p', { class: 'video-warning' }, h('strong', null, 'Content note: '), video.warning),
-    opts.compact ? null : h('p', { class: 'video-context' }, video.context),
-    h('p', { class: 'video-format' }, h('strong', null, 'What this video is: '), video.formatNote),
+    h('details', { class: 'video-about' }, h('summary', null, 'What kind of video is this?'), h('p', { class: 'video-context' }, video.context), h('p', { class: 'video-format' }, video.formatNote)),
     stage,
     h(
       'p',

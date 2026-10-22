@@ -1,6 +1,6 @@
 import { resources } from '../../data/resources';
-import { checkList, copyButton, pageHeader, quoteBox, stepHeader, textField, type PageCtx } from '../components';
-import { rungDescriptions, t3Checks } from '../copy';
+import { checkList, collapsible, copyButton, pageHeader, stepper, textField, type PageCtx } from '../components';
+import { t3Checks } from '../copy';
 import { h } from '../dom';
 import { ladderPanel } from '../ladder';
 import { getText, setText } from '../state';
@@ -15,20 +15,12 @@ function exampleLink(needle: string, text: string): HTMLElement {
 }
 
 export function renderTask3(ctx: PageCtx): HTMLElement {
-  const sections = rungDescriptions.map((r, i) =>
-    h(
-      'section',
-      { class: 'rung-block', 'data-rung': i },
-      h('h3', null, `${i + 1}. ${r.name}`),
-      h('p', null, r.text),
-    ),
-  );
-  const ladder = ladderPanel(ctx, { initial: 0, follow: () => sections });
+  const ladder = ladderPanel(ctx, { initial: 0 });
 
   const implField = textField({
     key: 't3.implication',
     label: 'Your implication, in 2-3 sentences',
-    hint: 'Say who should do or think differently, and what they should do or think. It can concern design, research or practice.',
+    hint: 'Who should do or think differently, and what?',
     rows: 4,
     counter: { kind: 'sentences', min: 2, max: 3 },
     big: true,
@@ -55,7 +47,7 @@ export function renderTask3(ctx: PageCtx): HTMLElement {
   themeField.addEventListener('input', refreshCard);
   implShare.addEventListener('input', refreshCard);
 
-  const fillBtn = h('button', { type: 'button', class: 'btn btn-small' }, 'Fill from my Task 1 theme and implication above');
+  const fillBtn = h('button', { type: 'button', class: 'btn btn-small' }, 'Fill from my Task 1 theme and my implication');
   fillBtn.addEventListener('click', () => {
     const name = getText('t1.themeName').trim();
     const concept = getText('t1.themeConcept').trim();
@@ -93,74 +85,56 @@ export function renderTask3(ctx: PageCtx): HTMLElement {
   document.addEventListener('keydown', onKey);
   ctx.onDispose(() => document.removeEventListener('keydown', onKey));
 
-  const root = h(
-    'div',
-    { class: 'page' },
-    pageHeader(
-      'Task 3: Beyond the theme: implications',
-      'A theme says what is going on. An implication answers "so what?". About 25 minutes.',
+  const examples = collapsible('See how published papers move from findings to implications', [
+    h(
+      'ul',
+      { class: 'plain-list' },
+      h('li', null, exampleLink('Deng', 'Deng et al. 2022'), ', pp. 11-16'),
+      h('li', null, exampleLink('Karim', 'Tahmidul Karim et al. 2025'), ', pp. 3-5'),
+      h('li', null, exampleLink('Choi', 'Choi et al. 2024'), ', pp. 221-224'),
+      h('li', null, exampleLink('Adiwangsa', 'Adiwangsa et al. 2024'), ', pp. 5-8'),
     ),
+  ]);
+
+  const warmup = [
+    h('p', { class: 'instruction' }, 'A theme says what is going on. An implication names who should do or think differently, and what.'),
     h(
       'div',
-      { class: 'split split-ladder' },
-      h(
-        'div',
-        { class: 'split-main' },
-        h(
-          'section',
-          { class: 'section' },
-          h('h2', null, 'Theme versus implication'),
-          h('p', null, 'An implication names who should do or think differently, and what they should do or think. It can concern design, research or practice (see Dourish 2006, "Implications for design", for a careful discussion of what implications are). Scroll or use the ladder buttons to see where an implication sits.'),
-          sections,
-          h(
-            'div',
-            { class: 'panel worked' },
-            h('h3', null, 'Worked example'),
-            h('p', null, h('strong', null, 'Theme: '), 'Students accept AI explanations for low-stakes study, but become sceptical and look for a second source when marks are on the line.'),
-            h('p', null, h('strong', null, 'Weak implication: '), 'Designers should make AI study tools more trustworthy. ', h('span', { class: 'muted' }, '(You could write this without any data.)')),
-            h('p', null, h('strong', null, 'Stronger implication: '), 'AI study tools could show sources and confidence when a student prepares for an assessment, rather than in every interaction.'),
-          ),
-        ),
-      ),
-      h('div', { class: 'split-side sticky' }, ladder.el),
+      { class: 'grid-2 worked' },
+      h('div', { class: 'card' }, h('p', { class: 'eyebrow' }, 'Weak'), h('p', null, 'Designers should make AI study tools more trustworthy.'), h('p', { class: 'small muted' }, 'You could write this without any data.')),
+      h('div', { class: 'card' }, h('p', { class: 'eyebrow' }, 'Stronger'), h('p', null, 'AI study tools could show sources and confidence when a student prepares for an assessment, rather than in every interaction.')),
     ),
-    h(
-      'section',
-      { class: 'section' },
-      stepHeader('Step 1', 'Write one implication', 15, 'Individual'),
-      h('p', null, 'Start from your group\'s theme from Task 1 (or your revised one from Task 2). Write one implication. Then run the two checks.'),
-      implField,
-      checkList('t3.checks', t3Checks, { legend: 'Self-checks (tick when true)' }),
-      h('p', { class: 'hint' }, 'If you cannot tick both, ask what the theme tells you that a reader would not already assume, and who could act on it.'),
-    ),
-    h(
-      'section',
-      { class: 'section' },
-      stepHeader('Step 2', 'Class share', 10, 'Whole class'),
-      h('p', null, 'Agree one theme and one implication from your group and put them on the card. The tutor will project cards or you can project your own.'),
-      themeField,
-      implShare,
-      h('div', { class: 'btn-row' }, fillBtn, copyButton('Copy card text', () => `Theme: ${getText('t3.shareTheme').trim()}\nImplication: ${getText('t3.shareImplication').trim()}`), projectBtn),
-      cardWrap,
-    ),
-    h(
-      'section',
-      { class: 'section' },
-      h('h2', null, 'See how published papers do it'),
-      h('p', null, 'Skim how these papers move from findings to implications. Look at how specific the implication is and which data it leans on.'),
-      h(
-        'ul',
-        { class: 'plain-list' },
-        h('li', null, exampleLink('Deng', 'Deng et al. 2022'), ', pp. 11-16'),
-        h('li', null, exampleLink('Karim', 'Tahmidul Karim et al. 2025'), ', pp. 3-5'),
-        h('li', null, exampleLink('Choi', 'Choi et al. 2024'), ', pp. 221-224'),
-        h('li', null, exampleLink('Adiwangsa', 'Adiwangsa et al. 2024'), ', pp. 5-8'),
-      ),
-      quoteBox('Next: Task 4 turns this into a short Ed post.'),
-      h('p', null, h('a', { class: 'btn btn-primary', href: '#/task-4' }, 'On to Task 4')),
+    h('p', { class: 'small muted' }, h('strong', null, 'Theme behind both: '), 'Students accept AI explanations for low-stakes study, but look for a second source when marks are on the line.'),
+    collapsible('Where does an implication sit? (Implication Ladder)', [ladder.el]),
+  ];
+
+  const write = [
+    h('p', { class: 'instruction' }, 'Start from your group\'s theme (Task 1, or your revision from Task 2). Write one implication, then run the two checks.'),
+    implField,
+    checkList('t3.checks', t3Checks, { legend: 'Self-checks (tick when true)' }),
+    examples,
+  ];
+
+  const share = [
+    h('p', { class: 'instruction' }, 'Agree one theme and one implication and put them on the card to share.'),
+    themeField,
+    implShare,
+    h('div', { class: 'btn-row' }, fillBtn, copyButton('Copy card text', () => `Theme: ${getText('t3.shareTheme').trim()}\nImplication: ${getText('t3.shareImplication').trim()}`), projectBtn),
+    cardWrap,
+  ];
+
+  return h(
+    'div',
+    { class: 'page' },
+    pageHeader('Task 3: Beyond the theme: implications', 'Turn your theme into a "so what?" for design, research or practice.'),
+    stepper(
+      'task3',
+      [
+        { title: 'So what?', body: warmup },
+        { title: 'Write one implication', minutes: 15, mode: 'Individual', body: write },
+        { title: 'Class share', minutes: 10, mode: 'Whole class', body: share },
+      ],
+      h('a', { class: 'btn btn-primary', href: '#/task-4' }, 'On to Task 4'),
     ),
   );
-
-  ctx.afterMount(() => ladder.start());
-  return root;
 }

@@ -1,6 +1,6 @@
 import { resources } from '../../data/resources';
 import type { Resource } from '../../types';
-import { pageHeader, type PageCtx } from '../components';
+import { collapsible, pageHeader, type PageCtx } from '../components';
 import { GROUP_LABEL, GROUP_ORDER } from '../copy';
 import { h } from '../dom';
 import { renderExtensions } from '../extensions';
@@ -18,10 +18,9 @@ export function renderResources(_ctx: PageCtx): HTMLElement {
   return h(
     'div',
     { class: 'page' },
-    pageHeader('Resources and extensions', 'Readings and references for this week, grouped by purpose. Links open in a new tab.'),
-    h('p', { class: 'small muted' }, 'A "Check before citing" badge means the details of that reference have not been verified against the source. Confirm authors, year and pages yourself.'),
+    pageHeader('Resources and extensions', 'Readings grouped by purpose. "Check before citing" means the reference is not fully verified.'),
     ordered.length
-      ? ordered.map((g) => h('section', { class: 'section' }, h('h2', null, GROUP_LABEL[g] ?? g), h('ul', { class: 'resource-list' }, (groups.get(g) ?? []).map(resourceItem))))
+      ? ordered.map((g, i) => collapsible(`${GROUP_LABEL[g] ?? g} (${groups.get(g)?.length ?? 0})`, [h('ul', { class: 'resource-list' }, (groups.get(g) ?? []).map(resourceItem))], { open: i === 0 }))
       : h('p', { class: 'muted' }, 'The resource list has not loaded.'),
     renderExtensions(),
   );
