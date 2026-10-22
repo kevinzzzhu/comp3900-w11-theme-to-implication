@@ -356,30 +356,6 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
   });
   wallPanel.el.querySelector('h3')?.after(fsBtn);
 
-  /* quick add: a new code lands in the Step 1 table and therefore on the wall */
-  const quickCode = h('input', { id: 'qa-code', type: 'text', placeholder: 'A short label', autocomplete: 'off', maxlength: 60 });
-  const quickExcerpt = h('input', { id: 'qa-excerpt', type: 'text', placeholder: 'e.g. Sarah 4:00, Sinclair reminds her to drink water', autocomplete: 'off' });
-  const quickMsg = h('p', { class: 'small', role: 'status', 'aria-live': 'polite' });
-  const quickForm = h(
-    'form',
-    { class: 'add-form', novalidate: true },
-    h('div', { class: 'form-grid' }, h('div', { class: 'field' }, h('label', { for: 'qa-code' }, 'Code'), quickCode), h('div', { class: 'field field-wide' }, h('label', { for: 'qa-excerpt' }, 'Moment (with timestamp)'), quickExcerpt)),
-    h('button', { type: 'submit', class: 'btn btn-primary' }, 'Add to my codes'),
-    quickMsg,
-  );
-  quickForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    if (!quickCode.value.trim()) {
-      quickMsg.textContent = 'Give the code a short label.';
-      quickCode.focus();
-      return;
-    }
-    const row = codeTable.fillRow([quickExcerpt.value.trim(), quickCode.value.trim(), '']);
-    quickMsg.textContent = `Added as row ${row} of your Step 1 table and put on the wall.`;
-    quickCode.value = '';
-    quickExcerpt.value = '';
-  });
-
   const clusterTable = editableTable({
     key: 't1.cluster',
     cols: t1ClusterCols,
@@ -402,7 +378,6 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
     h('h3', null, 'Cluster table'),
     clusterTable.el,
     collapsible('Discussion prompts', [h('ol', { class: 'prompt-list' }, t1Discussion.map((p, i) => h('li', null, h('p', null, p), boundTextarea(`t1.d${i + 1}`, p, 2))))]),
-    collapsible('Add a code from here', [quickForm]),
   ];
 
   /* ---------------- Step 3 ---------------- */

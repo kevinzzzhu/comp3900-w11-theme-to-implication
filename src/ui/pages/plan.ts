@@ -42,9 +42,7 @@ export function renderPlan(_ctx: PageCtx): HTMLElement {
     h(
       'p',
       { class: 'small muted' },
-      'Your own answers stay in this browser; only group boxes are shared, and only if you join a group room. Use Export (top right) to copy answers for Ed. Videos load from YouTube only when you press a button. If anything goes wrong, use the ',
-      h('a', { href: `${import.meta.env.BASE_URL}backup/Week11-group-backup.xlsx`, download: '' }, 'Excel backup workbook (one tab per group)'),
-      '.',
+      'Your own answers stay in this browser; only group boxes are shared, and only if you join a group room. Use Export (top right) to copy answers for Ed. Videos load from YouTube only when you press a button.',
     ),
   );
 }
