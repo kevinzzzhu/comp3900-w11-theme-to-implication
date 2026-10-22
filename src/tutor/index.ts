@@ -8,6 +8,7 @@ import { copyButton } from '../ui/components';
 import { h } from '../ui/dom';
 import { TimeLink, VideoChip } from '../ui/video';
 import { runSheet, sessionDecisions, themeDiagnosis, TUTOR_ONLY_MARK, videoTutorNotes } from './content';
+import { generateCode, prettyCode } from '../sync/config';
 import { buildGroups, groupsToText, parseRoster, type Student } from './groups';
 import { SessionTimer, type TimerView } from './timer';
 
@@ -121,9 +122,10 @@ export function mountTutor(_root: HTMLElement): void {
   const groupWarn = h('div', { class: 'td-warn', role: 'status', 'aria-live': 'polite' });
   const groupOut = h('div', { class: 'td-groups', 'aria-live': 'polite' });
   let currentGroups: Student[][] = [];
+  let currentCodes: string[] = [];
   const buildBtn = h('button', { type: 'button', class: 'btn btn-primary' }, 'Build groups');
   const reshuffleBtn = h('button', { type: 'button', class: 'btn' }, 'Reshuffle');
-  const copyGroups = copyButton('Copy groups', () => groupsToText(currentGroups, personOf));
+  const copyGroups = copyButton('Copy groups', () => groupsToText(currentGroups, personOf, currentCodes));
 
   const renderGroups = (): void => {
     groupOut.replaceChildren(
@@ -133,7 +135,7 @@ export function mountTutor(_root: HTMLElement): void {
         return h(
           'section',
           { class: 'td-group' },
-          h('h4', null, `Group ${i + 1} (${g.length})`),
+          h('h4', null, `Group ${i + 1} (${g.length})`, currentCodes[i] ? h('span', { class: 'td-code' }, ` Room code ${currentCodes[i]}`) : null),
           h('ul', null, g.map((s) => h('li', null, s.name, ' ', s.video ? VideoChip(s.video) : h('span', { class: 'muted' }, '(no video)')))),
           h('p', { class: 'small muted' }, [...mix.entries()].map(([k, n]) => `${k} ${n}`).join(', ')),
           g.length > 5 ? h('p', { class: 'td-warn' }, 'Over 5 members: no split into groups of 4-5 is possible with this class size.') : null,
@@ -145,6 +147,7 @@ export function mountTutor(_root: HTMLElement): void {
     const { students, warnings } = parseRoster(roster.value);
     groupWarn.replaceChildren(...warnings.map((w) => h('p', null, w)));
     currentGroups = buildGroups(students);
+    currentCodes = currentGroups.map(() => prettyCode(generateCode()));
     renderGroups();
   };
   buildBtn.addEventListener('click', build);

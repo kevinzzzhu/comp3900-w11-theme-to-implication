@@ -72,8 +72,8 @@ export function buildGroups(students: Student[], rng: () => number = Math.random
   return groups;
 }
 
-export function groupsToText(groups: Student[][], label: (v: VideoId | null) => string): string {
+export function groupsToText(groups: Student[][], label: (v: VideoId | null) => string, codes: string[] = []): string {
   return groups
-    .map((g, i) => `Group ${i + 1} (${g.length}): ${g.map((s) => `${s.name} [${label(s.video)}]`).join(', ')}`)
+    .map((g, i) => `Group ${i + 1}${codes[i] ? ` (room ${codes[i]})` : ''} (${g.length}): ${g.map((s) => `${s.name} [${label(s.video)}]`).join(', ')}`)
     .join('\n');
 }

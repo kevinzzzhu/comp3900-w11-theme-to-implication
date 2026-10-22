@@ -3,5 +3,6 @@ dist/
 dist-tutor/
 *.tsbuildinfo
 .env*
+!.env.example
 .DS_Store
 *.log

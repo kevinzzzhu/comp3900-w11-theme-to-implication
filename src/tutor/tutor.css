@@ -38,3 +38,4 @@
 .tutor-drawer.is-projector .td-readout { font-size: clamp(5rem, 16vw, 12rem); }
 .tutor-drawer.is-projector .td-seglabel { font-size: 1.6rem; }
 .tutor-drawer.is-projector .td-tabs, .tutor-drawer.is-projector .td-panels { display: none; }
+.td-code { font-weight: 700; letter-spacing: 0.08em; margin-left: 0.5em; font-variant-numeric: tabular-nums; }

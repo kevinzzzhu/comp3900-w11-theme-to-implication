@@ -60,6 +60,21 @@ function flush(): void {
   setStatus(ok ? 'saved' : 'error');
 }
 
+/** Called after every local edit so a joined group room can push it. Remote applies do not call it. */
+let changeHook: ((key: string) => void) | null = null;
+export function setChangeHook(fn: ((key: string) => void) | null): void {
+  changeHook = fn;
+}
+
+const keyListeners = new Map<string, Set<() => void>>();
+/** Be told when a remote edit changes this key. Return value unsubscribes. */
+export function subscribeKey(key: string, cb: () => void): () => void {
+  let set = keyListeners.get(key);
+  if (!set) keyListeners.set(key, (set = new Set()));
+  set.add(cb);
+  return () => set!.delete(cb);
+}
+
 function write(key: string, value: string): void {
   loaded.add(key);
   mem.set(key, value);
@@ -74,6 +89,30 @@ export function getText(key: string): string {
 }
 export function setText(key: string, value: string): void {
   write(key, value);
+  changeHook?.(key);
+}
+
+/** Store a value that arrived from a group room, then tell the fields showing it. */
+export function applyRemote(key: string, value: string): void {
+  write(key, value);
+  keyListeners.get(key)?.forEach((cb) => cb());
+}
+
+/** Stable row ids, so a group can merge table edits row by row. Kept next to the table, never exported. */
+export function getRowIds(key: string): string[] {
+  try {
+    const raw = read(`${key}#ids`);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+export function setRowIds(key: string, ids: string[]): void {
+  write(`${key}#ids`, JSON.stringify(ids));
+}
+export function newRowId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
 export function getRows(key: string): string[][] | null {
@@ -89,6 +128,7 @@ export function getRows(key: string): string[][] | null {
 }
 export function setRows(key: string, rows: string[][]): void {
   write(key, JSON.stringify(rows));
+  changeHook?.(key);
 }
 
 /** Checkbox sets are stored as a string of 0/1 characters. */
@@ -98,6 +138,7 @@ export function getChecks(key: string, n: number): boolean[] {
 }
 export function setChecks(key: string, values: boolean[]): void {
   write(key, values.map((v) => (v ? '1' : '0')).join(''));
+  changeHook?.(key);
 }
 
 export function onStatus(cb: (s: SaveStatus, at: Date | null) => void): () => void {

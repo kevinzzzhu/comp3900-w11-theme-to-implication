@@ -9,6 +9,7 @@ import { renderTask1 } from './ui/pages/task1';
 import { renderTask2 } from './ui/pages/task2';
 import { renderTask3 } from './ui/pages/task3';
 import { renderTask4 } from './ui/pages/task4';
+import { restoreRoom } from './sync/room';
 import { onClear } from './ui/state';
 
 const app = document.getElementById('app')!;
@@ -26,6 +27,7 @@ const routes: Route[] = [
 const shell = buildShell(app, routes);
 const router = startRouter(shell.main, routes, (r) => shell.setActive(r));
 onClear(() => router.rerender());
+restoreRoom();
 
 if (__TUTOR__) {
   import('./tutor').then((m) => m.mountTutor(app));

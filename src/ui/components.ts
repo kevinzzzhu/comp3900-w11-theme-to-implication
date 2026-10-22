@@ -1,7 +1,9 @@
 import { webglAvailable } from '../scenes/util';
 import type { SceneHandle } from '../scenes/util';
 import { h, sentenceCount, uid, wordCount, type Child } from './dom';
-import { getChecks, getRows, getText, setChecks, setRows, setText } from './state';
+import { isGroupKey } from '../sync/room';
+import { roomBar } from './roombar';
+import { getChecks, getRowIds, getRows, getText, newRowId, setChecks, setRowIds, setRows, setText, subscribeKey } from './state';
 
 export interface PageCtx {
   onDispose(fn: () => void): void;
@@ -45,6 +47,38 @@ function makeTextarea(opts: { id?: string; rows?: number; placeholder?: string; 
   });
   requestAnimationFrame(() => autogrow(ta));
   return ta;
+}
+
+
+/** Keep a field in step with edits that arrive from a group room. Never overwrites a field being typed in. */
+function followRemote(key: string, el: HTMLTextAreaElement | HTMLInputElement): void {
+  if (!isGroupKey(key)) return;
+  let pending: string | null = null;
+  const apply = (v: string): void => {
+    if (el.value === v) return;
+    el.value = v;
+    if (el instanceof HTMLTextAreaElement) autogrow(el);
+    el.classList.add('just-synced');
+    window.setTimeout(() => el.classList.remove('just-synced'), 1200);
+  };
+  const unsub = subscribeKey(key, () => {
+    if (!el.isConnected) {
+      unsub();
+      return;
+    }
+    const v = getText(key);
+    if (document.activeElement === el) pending = v;
+    else apply(v);
+  });
+  el.addEventListener('blur', () => {
+    if (pending !== null) {
+      apply(pending);
+      pending = null;
+    }
+  });
+  el.addEventListener('input', () => {
+    pending = null; // our own newer typing supersedes anything held back
+  });
 }
 
 /* ---------- counters ---------- */
@@ -110,11 +144,13 @@ export function textField(o: TextFieldOpts): HTMLElement {
     const inp = h('input', { id, type: 'text', placeholder: o.placeholder, autocomplete: 'off', value: getText(o.key) });
     if (o.hint) inp.setAttribute('aria-describedby', hintId);
     inp.addEventListener('input', () => setText(o.key, inp.value));
+    followRemote(o.key, inp);
     wrap.append(inp);
     return wrap;
   }
   const ta = makeTextarea({ id, rows: o.rows, placeholder: o.placeholder, value: getText(o.key), onInput: (v) => setText(o.key, v) });
   if (o.hint) ta.setAttribute('aria-describedby', hintId);
+  followRemote(o.key, ta);
   wrap.append(ta);
   if (o.counter) wrap.append(attachCounter(ta, o.counter));
   return wrap;
@@ -122,7 +158,7 @@ export function textField(o: TextFieldOpts): HTMLElement {
 
 /** Textarea bound to a state key without a visible label wrapper (caller supplies the label). */
 export function boundTextarea(key: string, label: string, rows = 3, onChange?: (v: string) => void): HTMLTextAreaElement {
-  return makeTextarea({
+  const ta = makeTextarea({
     rows,
     label,
     value: getText(key),
@@ -131,6 +167,8 @@ export function boundTextarea(key: string, label: string, rows = 3, onChange?: (
       onChange?.(v);
     },
   });
+  followRemote(key, ta);
+  return ta;
 }
 
 /* ---------- checklist ---------- */
@@ -150,6 +188,20 @@ export function checkList(key: string, items: string[], opts: { onChange?(state:
     const desc = opts.describe?.(i);
     set.append(h('div', { class: 'check' }, cb, h('label', { for: id }, label, desc ? h('span', { class: 'check-desc' }, desc) : null)));
   });
+  if (isGroupKey(key)) {
+    const unsub = subscribeKey(key, () => {
+      if (!set.isConnected) {
+        unsub();
+        return;
+      }
+      const next = getChecks(key, items.length);
+      set.querySelectorAll<HTMLInputElement>('input[type=checkbox]').forEach((box, i) => {
+        state[i] = next[i];
+        box.checked = next[i];
+      });
+      opts.onChange?.([...next]);
+    });
+  }
   return set;
 }
 
@@ -182,18 +234,31 @@ function normaliseRows(o: TableOpts, stored: string[][] | null): string[][] {
 }
 
 export function editableTable(o: TableOpts): TableHandle {
+  const shared = isGroupKey(o.key);
   const rows = normaliseRows(o, getRows(o.key));
+  const ids: string[] = shared ? getRowIds(o.key).slice(0, rows.length) : [];
+  if (shared) {
+    while (ids.length < rows.length) ids.push(newRowId());
+    setRowIds(o.key, ids); // persist now so the room and this table agree on row ids
+  }
   const min = o.minRows ?? 1;
   const tbody = h('tbody');
-  const save = (): void => setRows(o.key, rows);
+  let cells: HTMLTextAreaElement[][] = [];
+  const save = (): void => {
+    if (shared) setRowIds(o.key, ids);
+    setRows(o.key, rows);
+  };
 
   const render = (focusRow = -1): void => {
     tbody.replaceChildren();
+    cells = [];
     rows.forEach((row, ri) => {
       const tr = h('tr');
+      const rowCells: HTMLTextAreaElement[] = [];
       row.forEach((val, ci) => {
         if (ci === 0 && o.lockFirstCol) {
           tr.append(h('th', { scope: 'row', 'data-label': o.cols[0] }, val));
+          rowCells[ci] = undefined as unknown as HTMLTextAreaElement;
           return;
         }
         const ta = makeTextarea({
@@ -206,8 +271,10 @@ export function editableTable(o: TableOpts): TableHandle {
             save();
           },
         });
+        rowCells[ci] = ta;
         tr.append(h('td', { 'data-label': o.cols[ci] }, ta));
       });
+      cells.push(rowCells);
       if (!o.fixedRows) {
         const rm = h(
           'button',
@@ -218,6 +285,7 @@ export function editableTable(o: TableOpts): TableHandle {
             disabled: rows.length <= min,
             onClick: () => {
               rows.splice(ri, 1);
+              if (shared) ids.splice(ri, 1);
               save();
               render(Math.min(ri, rows.length - 1));
             },
@@ -236,9 +304,64 @@ export function editableTable(o: TableOpts): TableHandle {
 
   const addRow = (values?: string[]): void => {
     rows.push(o.cols.map((_, i) => values?.[i] ?? ''));
+    if (shared) ids.push(newRowId());
     save();
     render(rows.length - 1);
   };
+
+  if (shared) {
+    // A groupmate changed the table: take their rows, but never disturb the cell being typed in.
+    const unsub = subscribeKey(o.key, () => {
+      if (!tbody.isConnected) {
+        unsub();
+        return;
+      }
+      const active = document.activeElement;
+      let focus: { id: string; col: number; value: string; start: number | null; end: number | null } | null = null;
+      cells.forEach((rc, ri) =>
+        rc.forEach((ta, ci) => {
+          if (ta && ta === active) focus = { id: ids[ri], col: ci, value: ta.value, start: ta.selectionStart, end: ta.selectionEnd };
+        }),
+      );
+      const nextRows = normaliseRows(o, getRows(o.key));
+      const nextIds = getRowIds(o.key).slice(0, nextRows.length);
+      while (nextIds.length < nextRows.length) nextIds.push(newRowId());
+      const sameShape = nextIds.join(',') === ids.join(',');
+      rows.splice(0, rows.length, ...nextRows);
+      ids.splice(0, ids.length, ...nextIds);
+      const f = focus as { id: string; col: number; value: string; start: number | null; end: number | null } | null;
+      if (f) {
+        const fr = ids.indexOf(f.id);
+        if (fr >= 0) {
+          rows[fr][f.col] = f.value; // our own typing wins locally
+          save();
+        }
+      }
+      if (sameShape) {
+        rows.forEach((row, ri) =>
+          row.forEach((val, ci) => {
+            const ta = cells[ri]?.[ci];
+            if (ta && ta !== active && ta.value !== val) {
+              ta.value = val;
+              autogrow(ta);
+              ta.classList.add('just-synced');
+              window.setTimeout(() => ta.classList.remove('just-synced'), 1200);
+            }
+          }),
+        );
+        return;
+      }
+      render();
+      if (f) {
+        const fr = ids.indexOf(f.id);
+        const ta = cells[fr]?.[f.col];
+        if (ta) {
+          ta.focus();
+          if (f.start !== null && f.end !== null) ta.setSelectionRange(f.start, f.end);
+        }
+      }
+    });
+  }
 
   const head = h('tr', null, o.cols.map((c) => h('th', { scope: 'col' }, c)), o.fixedRows ? null : h('th', { scope: 'col', class: 'row-actions' }, h('span', { class: 'sr-only' }, 'Row actions')));
   const table = h('table', { class: 'etable' }, h('caption', { class: 'sr-only' }, o.caption), h('thead', null, head), tbody);
@@ -418,6 +541,7 @@ export function stepper(key: string, steps: StepDef[], finish?: Child, onShow?: 
         heading,
         st.minutes ? h('p', { class: 'step-meta' }, h('span', { class: 'pill' }, `${st.minutes} min`), st.mode ? h('span', { class: 'pill pill-alt' }, st.mode) : null) : null,
       ),
+      st.mode === 'Group' || st.mode === 'Whole class' ? roomBar() : null,
       ...st.body,
       foot,
     );

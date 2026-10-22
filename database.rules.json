@@ -1,0 +1,42 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "rooms": {
+      "$code": {
+        ".read": "auth != null && $code.matches(/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/)",
+        ".write": "auth != null && !newData.exists() && $code.matches(/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/)",
+        ".validate": "$code.matches(/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/)",
+        "meta": {
+          "createdAt": {
+            ".write": "auth != null && !data.exists()",
+            ".validate": "newData.isNumber()"
+          },
+          "$other": { ".validate": false }
+        },
+        "d": {
+          ".write": "auth != null",
+          "$k1": {
+            ".validate": "$k1.matches(/^[A-Za-z0-9_-]{1,48}$/) && ((newData.isString() && newData.val().length <= 4000) || newData.hasChildren())",
+            "$k2": {
+              ".validate": "$k2.matches(/^[A-Za-z0-9_-]{1,48}$/) && ((newData.isString() && newData.val().length <= 4000) || newData.hasChildren())",
+              "$k3": {
+                ".validate": "$k3.matches(/^[A-Za-z0-9_-]{1,48}$/) && ((newData.isString() && newData.val().length <= 4000) || newData.hasChildren())",
+                "$k4": {
+                  ".validate": "$k4.matches(/^[A-Za-z0-9_-]{1,48}$/) && newData.isString() && newData.val().length <= 4000"
+                }
+              }
+            }
+          }
+        },
+        "p": {
+          "$uid": {
+            ".write": "auth != null && $uid === auth.uid",
+            ".validate": "newData.isBoolean()"
+          }
+        },
+        "$other": { ".validate": false }
+      }
+    }
+  }
+}

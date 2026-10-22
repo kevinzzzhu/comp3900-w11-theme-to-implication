@@ -65,3 +65,7 @@ The drawer has a run sheet with a session ring timer (Space start/pause, Right a
 - If storage is blocked (private mode), the site keeps answers in memory and says so in the header; Export before closing the tab.
 - YouTube is contacted only after a student presses "Load video" or clicks a timestamp while a video panel is on the page, and then only via `youtube-nocookie.com`. Fonts come from Google Fonts.
 - Export gives Markdown (copy or download) or print; the print stylesheet hides navigation and 3D widgets.
+
+## Group rooms (live sharing)
+
+Group steps (Task 1 Steps 2 and 3, Task 2, Task 3 Step 2) can be shared live: one person taps "New code", the others type it. Only the boxes and tables on those steps are shared; Step 1 work, the Ed post and everything else stay on the student's device. Rooms use a small Firebase Realtime Database; without the `VITE_FIREBASE_*` variables the deployed site simply hides the feature. Setup, rules, privacy and the emulator test are in [docs/group-rooms.md](docs/group-rooms.md). Tutor mode's group builder prints a room code per group.
