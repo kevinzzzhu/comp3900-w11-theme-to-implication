@@ -520,6 +520,10 @@ export interface StepDef {
   title: string;
   minutes?: number;
   mode?: 'Individual' | 'Group' | 'Whole class';
+  /** Show the group room strip even on a step that is not a group step. */
+  room?: boolean;
+  /** Replaces the strip's "what is shared" sentence for this step. */
+  roomNote?: string;
   body: Child[];
 }
 
@@ -570,7 +574,7 @@ export function stepper(key: string, steps: StepDef[], finish?: Child, onShow?: 
         heading,
         st.minutes ? h('p', { class: 'step-meta' }, h('span', { class: 'pill' }, `${st.minutes} min`), st.mode ? h('span', { class: 'pill pill-alt' }, st.mode) : null) : null,
       ),
-      st.mode === 'Group' || st.mode === 'Whole class' ? roomBar() : null,
+      st.mode === 'Group' || st.mode === 'Whole class' || st.room ? roomBar(st.roomNote) : null,
       ...st.body,
       foot,
     );

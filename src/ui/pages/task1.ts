@@ -8,6 +8,7 @@ import {
 } from '../components';
 import { LENS_COLORS, t1ClusterCols, t1CodeCols, t1Discussion } from '../copy';
 import { h, uid } from '../dom';
+import { subscribeKey } from '../state';
 import { TimeLink, VideoChip, VideoPanel, personName } from '../video';
 import type { VideoId } from '../../types';
 
@@ -133,7 +134,42 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
   };
   showHint();
 
+  /* Reference rail: your earlier work stays beside the step you are on, so nobody has to click back. */
+  const railCodes = h('ul', { 'aria-label': 'Codes from Step 1' });
+  const railClusters = h('ul', { 'aria-label': 'Clusters from Step 2' });
+  const paintRailCodes = (): void => {
+    const all = [...notes.values()].sort((a, b) => (a.owner === me ? -1 : b.owner === me ? 1 : a.owner.localeCompare(b.owner)));
+    if (!all.length) {
+      railCodes.replaceChildren(h('li', { class: 'muted' }, 'No codes yet. Add them in Step 1.'));
+      return;
+    }
+    railCodes.replaceChildren(
+      ...all.map((n) =>
+        h('li', { style: `--dot:${colorOf(n.owner)}` }, h('strong', null, n.code), n.owner === me ? '' : ' (groupmate)', n.excerpt ? h('span', { class: 'rail-excerpt' }, n.excerpt) : null),
+      ),
+    );
+  };
+  const paintRailClusters = (): void => {
+    const rows = clusterTable.snapshot().filter((r) => r.cells.some((c) => c.trim()));
+    if (!rows.length) {
+      railClusters.replaceChildren(h('li', { class: 'muted' }, 'No clusters written yet.'));
+      return;
+    }
+    railClusters.replaceChildren(
+      ...rows.map((r) =>
+        h('li', null, h('strong', null, r.cells[0] || '(unnamed)'), r.cells[1] ? h('span', { class: 'rail-excerpt' }, `Connects: ${r.cells[1]}`) : null, r.cells[2] ? h('span', { class: 'rail-excerpt' }, `Suggests: ${r.cells[2]}`) : null),
+      ),
+    );
+  };
+  const rail = h(
+    'aside',
+    { class: 'ref-rail', 'data-step': '0', 'aria-label': 'Your earlier work in this task' },
+    h('section', { class: 'rail-codes' }, h('h3', null, 'Step 1: codes'), railCodes),
+    h('section', { class: 'rail-clusters' }, h('h3', null, 'Step 2: clusters'), railClusters),
+  );
+
   const paintLegend = (): void => {
+    paintRailCodes();
     const others = owners().filter((o) => o !== me);
     legend.replaceChildren(
       ...[me, ...others].map((o) =>
@@ -177,7 +213,10 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
 
   const placeNote = (g: WallHandle, n: CodeNote, at?: WallPos): void => {
     const where = g.upsert(toWall(n), at);
-    if (where) positions.set(n.id, where);
+    if (where) {
+      positions.set(n.id, where);
+      if (n.owner === me && live()) sharedSet(['p', n.id], posText(where));
+    }
   };
   const repaintAll = (g: WallHandle): void => {
     for (const n of notes.values()) g.upsert(toWall(n));
@@ -208,10 +247,14 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
       if (before && before.code === n.code && before.excerpt === n.excerpt && before.why === n.why) continue;
       const isNew = !before;
       notes.set(id, n);
+      // Offer it to the group straight away; the wall may not be on screen yet, and that must not delay sharing.
+      if (live()) {
+        published.add(id);
+        publishNote(n);
+      }
       wall.ready((g) => {
         placeNote(g, n);
-        if (isNew || live()) paintLegend();
-        if (live()) publishNote(n);
+        if (isNew) paintLegend();
       });
     }
     paintLegend();
@@ -260,6 +303,7 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
         const changed = !local || local.code !== next.code || local.excerpt !== next.excerpt || local.why !== next.why || local.owner !== next.owner;
         if (!changed) continue;
         notes.set(id, next);
+        paintLegend();
         const p = typeof pNode[id] === 'string' ? (pNode[id] as string).split(',').map(Number) : null;
         const at = p && p.length === 2 && p.every(Number.isFinite) ? (p as WallPos) : undefined;
         wall.ready((g) => {
@@ -344,6 +388,14 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
     addLabel: 'Add a cluster',
   });
 
+  clusterTable.onChange(paintRailClusters);
+  const stopCluster = subscribeKey('t1.cluster', () => {
+    if (!rail.isConnected) stopCluster();
+    else paintRailClusters();
+  });
+  paintRailClusters();
+  paintRailCodes();
+
   const step2 = [
     h('p', { class: 'instruction' }, 'Your codes from Step 1 are on the wall. Take turns explaining yours, drag related codes together, then name each cluster below. Join a group room to see everyone\'s codes on one wall.'),
     wallWrap,
@@ -363,17 +415,19 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
     collapsible('What makes it a theme?', [quoteBox('A pattern of shared meaning organised around a central concept. It interprets what people said rather than summarising it.')]),
   ];
 
-  root.append(
-    stepper(
-      'task1',
-      [
-        { title: 'Code', minutes: 10, mode: 'Individual', body: step1 },
-        { title: 'Share and cluster', minutes: 8, mode: 'Group', body: step2 },
-        { title: 'Candidate theme', minutes: 7, mode: 'Group', body: step3 },
-      ],
-      h('a', { class: 'btn btn-primary', href: '#/task-2' }, 'On to Task 2'),
-    ),
+  const task1Stepper = stepper(
+    'task1',
+    [
+      { title: 'Code', minutes: 10, mode: 'Individual', room: true, roomNote: 'Join your group room now and your codes appear on the group wall in Step 2 as you write them. Everything else on this step stays private.', body: step1 },
+      { title: 'Share and cluster', minutes: 8, mode: 'Group', body: step2 },
+      { title: 'Candidate theme', minutes: 7, mode: 'Group', body: step3 },
+    ],
+    h('a', { class: 'btn btn-primary', href: '#/task-2' }, 'On to Task 2'),
+    (i) => {
+      rail.dataset.step = String(i); // Step 2 shows the codes; Step 3 shows codes and clusters
+    },
   );
+  root.append(h('div', { class: 'with-rail' }, task1Stepper, rail));
 
   return root;
 }

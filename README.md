@@ -69,3 +69,7 @@ The drawer has a run sheet with a session ring timer (Space start/pause, Right a
 ## Group rooms (live sharing)
 
 Group steps (Task 1 Steps 2 and 3, Task 2, Task 3 Step 2) can be shared live: one person taps "New code", the others type it. Only the boxes and tables on those steps are shared; Step 1 work, the Ed post and everything else stay on the student's device. Rooms use a small Firebase Realtime Database; without the `VITE_FIREBASE_*` variables the deployed site simply hides the feature. Setup, rules, privacy and the emulator test are in [docs/group-rooms.md](docs/group-rooms.md). Tutor mode's group builder prints a room code per group.
+
+## Backup workbook (Excel)
+
+`public/backup/Week11-group-backup.xlsx` is a plain Excel file with one tab per group (Group 1, Group 2, ...), each holding Tasks 1 to 4 top to bottom, plus a "Class view" tab that collects every group's theme and implication. Upload it once to OneDrive or Google Drive with edit access and each group types on its own tab. The site links to it from the Plan and Resources pages. Rebuild it with a different group count using `python3 scripts/make_backup_workbook.py 12`.

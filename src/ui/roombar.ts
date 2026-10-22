@@ -4,7 +4,7 @@ import { copyText } from './components';
 import { h } from './dom';
 
 /** Join / status strip for group steps. Null when this build has no group service. */
-export function roomBar(): HTMLElement | null {
+export function roomBar(note?: string): HTMLElement | null {
   if (!groupRoomsAvailable()) return null;
   const root = h('div', { class: 'room-bar', role: 'group', 'aria-label': 'Group room' });
 
@@ -30,7 +30,7 @@ export function roomBar(): HTMLElement | null {
       root.append(
         h('p', { class: 'room-line' }, status, h('strong', { class: 'room-code' }, prettyCode(s.code)), people),
         h('p', { class: 'small muted' }, s.phase === 'live'
-          ? 'Boxes and tables on this step are shared with everyone in the room, and sync live.'
+          ? note ?? 'Boxes and tables on this step are shared with everyone in the room, and sync live.'
           : 'Offline: your edits are kept on this device and will sync when you reconnect.'),
         h('div', { class: 'btn-row' }, copy, leave, del),
       );
@@ -59,6 +59,7 @@ export function roomBar(): HTMLElement | null {
       h('p', { class: 'room-line' }, h('strong', null, 'Work live with your group'), h('span', { class: 'muted' }, ' (optional)')),
       form,
       ...(s.phase === 'error' ? [h('p', { class: 'note-warn small', role: 'alert' }, s.message)] : []),
+      ...(note ? [h('p', { class: 'small muted' }, note)] : []),
       h('p', { class: 'small muted' }, 'One person taps "New code", the rest type it. Shared boxes are stored on a group server, so leave out names and personal details.'),
     );
   };
