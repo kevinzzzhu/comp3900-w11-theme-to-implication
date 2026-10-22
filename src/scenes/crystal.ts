@@ -70,15 +70,36 @@ function makeRows(layers: string[]): { list: HTMLOListElement; rows: HTMLLIEleme
 export function mountCrystal(el: HTMLElement, layers: string[]): CrystalHandle {
   el.textContent = '';
   const n = layers.length;
-  const wrap = h('div', { style: 'display:flex;flex-wrap:wrap;gap:12px;align-items:stretch;width:100%;' });
-  const host = h('div', { style: 'flex:1 1 240px;min-width:0;position:relative;' });
+  // The page gives widget stages a fixed height and hides overflow; the crystal sizes itself so nothing is cut off.
+  el.style.height = 'auto';
+  el.style.overflow = 'visible';
+  el.style.background = 'transparent';
+  const STAGE_H = 'clamp(340px, 52vh, 460px)';
+  const wrap = h('div', { style: 'display:flex;flex-wrap:wrap;gap:14px;align-items:stretch;width:100%;' });
+  const host = h('div', {
+    style: `flex:1 1 260px;min-width:0;position:relative;height:${STAGE_H};border-radius:10px;overflow:hidden;background:#14110f;`,
+  });
   const { list, rows, bars } = makeRows(layers);
+  list.style.padding = '10px 0'; // stretches to the tower's height when side by side, wraps below it when narrow
+  const score = h('div', {
+    style:
+      'position:absolute;left:10px;right:10px;bottom:8px;text-align:center;font-size:.85rem;font-weight:600;' +
+      'color:#f3eadd;text-shadow:0 1px 2px rgba(0,0,0,.6);pointer-events:none;',
+    attrs: { 'aria-hidden': 'true' },
+  });
+  host.append(score);
   el.append(wrap);
 
   let lit: boolean[] = new Array(n).fill(false);
   let theme: ThemeId = 'mine';
 
+  const verdict = (met: number): string => (met <= 2 ? 'reads like a topic summary' : met <= 4 ? 'a theme taking shape' : 'a well-developed theme');
+  const paintScore = () => {
+    const met = lit.filter(Boolean).length;
+    score.textContent = theme === 'A' && met === 0 ? `0 of ${n} criteria met` : `${met} of ${n} criteria met: ${verdict(met)}`;
+  };
   const paintRows = () => {
+    paintScore();
     rows.forEach((row, i) => {
       const on = !!lit[i];
       row.style.opacity = on ? '1' : '0.6';
@@ -92,7 +113,6 @@ export function mountCrystal(el: HTMLElement, layers: string[]): CrystalHandle {
     ? createStage(host, {
         fov: 36,
         minHeight: 300,
-        aspect: '4 / 5',
         label: `Theme crystal: a tower of ${n} layers, one per quality criterion. Lit layers meet the criterion.`,
       })
     : null;
@@ -101,6 +121,7 @@ export function mountCrystal(el: HTMLElement, layers: string[]): CrystalHandle {
   if (!stage) {
     wrap.append(list);
     list.style.flex = '1 1 100%';
+    list.style.height = 'auto';
     const accent = '#' + accentColor().getHexString();
     const paintBars = () => {
       bars.forEach((bar, i) => {
@@ -206,9 +227,9 @@ export function mountCrystal(el: HTMLElement, layers: string[]): CrystalHandle {
 
   const frameCamera = () => {
     const cam = stage.camera;
-    const target = 2.7;
-    const dist = fitDistance(cam, 2.6, 3.9);
-    cam.position.set(0, target + dist * 0.28, dist * 0.96);
+    const target = 2.65; // slightly below centre so the base clears the score caption
+    const dist = fitDistance(cam, 2.4, 3.9);
+    cam.position.set(0, target + dist * 0.22, dist * 0.97);
     cam.lookAt(0, target, 0);
     cam.updateMatrixWorld();
   };

@@ -196,6 +196,19 @@ function applyTable(tree: Tree, key: string, f: FieldDef): void {
   lastPushedTable.set(key, { ids: remote.ids.filter((id) => outIds.includes(id)), cells });
 }
 
+/* ------------------- shared channel: data that is not a form field ------------------- */
+// The galaxy keeps orb positions and added orbs under the room's "galaxy" key. Writes are
+// optimistic and last-writer-wins per leaf; the page decides what each leaf means.
+const sharedListeners = new Set<(galaxy: Tree) => void>();
+
+export function sharedSet(path: string[], value: string | null): void {
+  conn?.set(['galaxy', ...path], value);
+}
+export function onShared(cb: (galaxy: Tree) => void): () => void {
+  sharedListeners.add(cb);
+  return () => sharedListeners.delete(cb);
+}
+
 let sawData = false;
 
 function handleTree(tree: Tree): void {
@@ -207,6 +220,9 @@ function handleTree(tree: Tree): void {
     return;
   }
   if (!empty) sawData = true;
+  const galaxy = tree.galaxy;
+  const galaxyTree: Tree = typeof galaxy === 'object' && galaxy ? galaxy : {};
+  sharedListeners.forEach((cb) => cb(galaxyTree));
   for (const f of groupFields) {
     if (f.kind === 'table') {
       applyTable(tree, f.key, f);

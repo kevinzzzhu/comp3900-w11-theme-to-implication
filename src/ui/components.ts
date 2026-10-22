@@ -222,6 +222,8 @@ export interface TableOpts {
 export interface TableHandle {
   el: HTMLElement;
   addRow(values?: string[]): void;
+  /** Put values in the first blank row, or add a row when none is blank. Returns the 1-based row number used. */
+  fillRow(values: string[]): number;
 }
 
 function normaliseRows(o: TableOpts, stored: string[][] | null): string[][] {
@@ -302,11 +304,23 @@ export function editableTable(o: TableOpts): TableHandle {
     }
   };
 
-  const addRow = (values?: string[]): void => {
+  const addRow = (values?: string[], focus = true): void => {
     rows.push(o.cols.map((_, i) => values?.[i] ?? ''));
     if (shared) ids.push(newRowId());
     save();
-    render(rows.length - 1);
+    render(focus ? rows.length - 1 : -1);
+  };
+
+  const fillRow = (values: string[]): number => {
+    const blank = rows.findIndex((r) => r.every((c) => c.trim() === ''));
+    if (blank >= 0) {
+      rows[blank] = o.cols.map((_, i) => values[i] ?? '');
+      save();
+      render();
+      return blank + 1;
+    }
+    addRow(values, false);
+    return rows.length;
   };
 
   if (shared) {
@@ -370,7 +384,7 @@ export function editableTable(o: TableOpts): TableHandle {
     el.append(h('div', { class: 'table-actions' }, h('button', { type: 'button', class: 'btn btn-small', onClick: () => addRow() }, o.addLabel ?? 'Add row')));
   }
   render();
-  return { el, addRow };
+  return { el, addRow: (v) => addRow(v), fillRow };
 }
 
 /* ---------- layout helpers ---------- */
@@ -573,6 +587,16 @@ export function stepper(key: string, steps: StepDef[], finish?: Child, onShow?: 
       (panels[i].querySelector('h2') as HTMLElement | null)?.focus({ preventScroll: true });
     }
   }
+  // Other parts of the page can ask this stepper to open a step, e.g. after copying into a table on another step.
+  const onGoto = (e: Event): void => {
+    const d = (e as CustomEvent<{ key: string; index: number }>).detail;
+    if (!root.isConnected) {
+      window.removeEventListener('w11:goto-step', onGoto);
+      return;
+    }
+    if (d.key === key && d.index >= 0 && d.index < steps.length) show(d.index, true);
+  };
+  window.addEventListener('w11:goto-step', onGoto);
   show(current, false);
   return root;
 }

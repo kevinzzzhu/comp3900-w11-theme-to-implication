@@ -25,8 +25,15 @@ import {
 } from './util';
 import type { SceneHandle } from './util';
 
+export type OrbPos = [number, number, number];
+
 export interface GalaxyHandle extends SceneHandle {
-  addOrb(o: Observation): void;
+  /** Add an orb. With `at` it is placed there (used when a groupmate's orb arrives); returns where it ended up. */
+  addOrb(o: Observation, at?: OrbPos): OrbPos | void;
+  /** Called when an orb has been dragged and has settled. Fires once per orb that really moved. */
+  onMoved(cb: (id: string, pos: OrbPos) => void): void;
+  /** Move an orb to a position chosen elsewhere (a groupmate). No callback fires for it. */
+  setPosition(id: string, pos: OrbPos): void;
 }
 
 const VIDEO_COLORS: Record<VideoId, string> = { simon: '#2B6672', sarah: '#B5527A', stacey: '#C48A1F' };
@@ -134,7 +141,9 @@ function mountGalaxyFallback(
   el.append(root);
 
   return {
-    addOrb: add,
+    addOrb: (o) => add(o),
+    onMoved() {},
+    setPosition() {},
     dispose() {
       chips.clear();
       lists.clear();
@@ -159,6 +168,10 @@ interface Orb {
   spawn: number;
   settle: number;
   spin: number;
+  /** Where a groupmate put this orb; base eases toward it. */
+  goto: Vector3 | null;
+  /** Last position reported or received, to tell real moves from drift. */
+  known: Vector3;
 }
 
 export function mountGalaxy(
@@ -268,6 +281,8 @@ export function mountGalaxy(
       spawn: spawnAnim && !stage.reduced ? 0 : 1,
       settle: 0,
       spin: (rng() - 0.5) * 0.6,
+      goto: null,
+      known: pos.clone(),
     };
     mesh.rotation.set(rng() * 3, rng() * 3, rng() * 3);
     if (orb.spawn < 1) mesh.scale.setScalar(0.0001);
@@ -321,6 +336,15 @@ export function mountGalaxy(
     for (const orb of orbs) orb.mesh.position.copy(orb.base);
   };
   relaxAll(40);
+  for (const orb of orbs) orb.known.copy(orb.base);
+  const movedCbs: ((id: string, pos: OrbPos) => void)[] = [];
+  const reportMoves = () => {
+    for (const orb of orbs) {
+      if (orb.goto || orb.base.distanceTo(orb.known) < 0.04) continue;
+      orb.known.copy(orb.base);
+      movedCbs.forEach((cb) => cb(orb.o.id, [orb.base.x, orb.base.y, orb.base.z]));
+    }
+  };
 
   // Soft magnetism for a freshly dropped orb: gentle pull toward its neighbours, never overlapping them.
   const magnetStep = (orb: Orb, dt: number, strength: number) => {
@@ -464,6 +488,7 @@ export function mountGalaxy(
       if (stage.reduced) {
         for (let i = 0; i < 40; i++) magnetStep(orb, 0.05, 1);
         orb.mesh.position.copy(orb.base);
+        reportMoves();
       } else {
         orb.settle = 1.4;
       }
@@ -510,6 +535,17 @@ export function mountGalaxy(
         orb.settle = Math.max(0, orb.settle - dt);
         magnetStep(orb, dt, orb.settle / 1.4);
         active = true;
+        if (orb.settle === 0) reportMoves();
+      }
+      if (orb.goto && !isDrag) {
+        orb.base.x = stage.damp(orb.base.x, orb.goto.x, 6, dt);
+        orb.base.y = stage.damp(orb.base.y, orb.goto.y, 6, dt);
+        orb.base.z = stage.damp(orb.base.z, orb.goto.z, 6, dt);
+        active = true;
+        if (orb.base.distanceTo(orb.goto) < 0.01) {
+          orb.base.copy(orb.goto);
+          orb.goto = null;
+        }
       }
       const wantDrift = stage.reduced || isDrag || orb.settle > 0.9 ? 0 : 1;
       orb.driftK = stage.damp(orb.driftK, wantDrift, 3, dt);
@@ -543,8 +579,20 @@ export function mountGalaxy(
   });
 
   const makeHandle: GalaxyHandle = {
-    addOrb(o) {
+    addOrb(o, at) {
       if (byId.has(o.id)) return;
+      if (at) {
+        const placedAt = new Vector3(at[0], at[1], at[2]);
+        clampBase(placedAt);
+        const fixed = makeOrb(o, placedAt, true);
+        fixed.known.copy(placedAt);
+        if (stage.reduced) {
+          fixed.s = 1;
+          fixed.mesh.scale.setScalar(1);
+        }
+        stage.invalidate();
+        return at;
+      }
       // Pick the freest of several seeded candidates near this video's region.
       const rng = mulberry32(hashString(`add:${o.id}`));
       const [cx, cy] = REGION[o.video];
@@ -563,6 +611,7 @@ export function mountGalaxy(
         }
       }
       const orb = makeOrb(o, best, true);
+      orb.known.copy(best);
       if (stage.reduced) {
         orb.s = 1;
         orb.mesh.scale.setScalar(1);
@@ -571,6 +620,24 @@ export function mountGalaxy(
         'aria-label',
         `Observation galaxy: ${orbs.length} orbs colored by video and shaped by label. Drag orbs to cluster them.`,
       );
+      stage.invalidate();
+      return [best.x, best.y, best.z];
+    },
+    onMoved(cb) {
+      movedCbs.push(cb);
+    },
+    setPosition(id, pos) {
+      const orb = orbs.find((x) => x.o.id === id);
+      if (!orb || orb === dragging) return;
+      const target = new Vector3(pos[0], pos[1], pos[2]);
+      clampBase(target);
+      orb.known.copy(target); // a groupmate's move is not ours to report back
+      if (stage.reduced) {
+        orb.base.copy(target);
+        orb.mesh.position.copy(target);
+      } else {
+        orb.goto = target;
+      }
       stage.invalidate();
     },
     dispose() {

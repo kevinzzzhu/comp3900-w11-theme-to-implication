@@ -386,3 +386,21 @@ fieldset { border: 0; padding: 0; margin: 0 0 1rem; min-width: 0; }
 .room-form { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 6px; }
 .room-input { font: inherit; font-size: 1.1rem; letter-spacing: 0.12em; text-transform: uppercase; width: 9.5em; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--bg); color: var(--text-strong); }
 .just-synced { box-shadow: 0 0 0 3px rgba(46, 125, 79, 0.45); transition: box-shadow 0.4s ease; }
+
+/* ---------- observation galaxy: big stage, card beside it ---------- */
+.galaxy-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; background: var(--bg); }
+.galaxy-wrap > .panel { margin: 0; }
+.galaxy-wrap .widget-stage { height: clamp(460px, 72vh, 800px); }
+.galaxy-fs { float: right; margin-top: -2.2rem; }
+.galaxy-side { min-width: 0; }
+.galaxy-wrap:fullscreen { padding: 16px; overflow: auto; grid-template-columns: minmax(0, 1fr) 340px; }
+.galaxy-wrap:fullscreen .widget-stage { height: calc(100vh - 170px); }
+.galaxy-wrap.is-expanded { position: fixed; inset: 0; z-index: 70; padding: 16px; overflow: auto; }
+.galaxy-wrap.is-expanded .widget-stage { height: calc(100vh - 170px); }
+.note-ok { color: #2e7d4f; font-weight: 600; margin: 8px 0 0; }
+@media (prefers-color-scheme: dark) { .note-ok { color: #7fd1a0; } }
+@media (max-width: 900px) {
+  .galaxy-wrap { grid-template-columns: minmax(0, 1fr); }
+  .galaxy-wrap .widget-stage { height: clamp(360px, 60vh, 560px); }
+  .galaxy-fs { float: none; margin: 0 0 8px; }
+}

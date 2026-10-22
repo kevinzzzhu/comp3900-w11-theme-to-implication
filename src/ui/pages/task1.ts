@@ -1,7 +1,8 @@
 import { lensObservationIds, lenses } from '../../data/lenses';
 import { observations } from '../../data/observations';
 import { videos } from '../../data/videos';
-import { mountGalaxy } from '../../scenes/galaxy';
+import { mountGalaxy, type OrbPos } from '../../scenes/galaxy';
+import { onShared, sharedSet } from '../../sync/room';
 import { mountPrism } from '../../scenes/prism';
 import type { Label, Observation, VideoId } from '../../types';
 import {
@@ -30,7 +31,7 @@ function loadMine(): Observation[] {
   rows.forEach((r, i) => {
     const t = parseTime(r[1] ?? '');
     if (t === null || !['simon', 'sarah', 'stacey'].includes(r[0])) return;
-    out.push({ id: `mine-${i + 1}`, video: r[0] as VideoId, t, label: (['O', 'R', 'I'].includes(r[2]) ? r[2] : 'I') as Label, excerpt: r[3] ?? '' });
+    out.push({ id: r[4] || `mine-${i + 1}`, video: r[0] as VideoId, t, label: (['O', 'R', 'I'].includes(r[2]) ? r[2] : 'I') as Label, excerpt: r[3] ?? '' });
   });
   return out;
 }
@@ -116,10 +117,14 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
     const inWin = inParticipantWindow(o);
     const m = labelMeaning[o.label];
     const addBtn = h('button', { type: 'button', class: 'btn btn-small' }, 'Copy into my code table');
+    const copied = h('p', { class: 'note-ok small', role: 'status', 'aria-live': 'polite' });
     addBtn.addEventListener('click', () => {
-      codeTable.addRow([`${personName(o.video)} ${fmtTime(o.t)}: ${o.excerpt}`, '', '']);
-      addBtn.textContent = 'Added to your code table';
+      const row = codeTable.fillRow([`${personName(o.video)} ${fmtTime(o.t)}: ${o.excerpt}`, '', '']);
       addBtn.setAttribute('disabled', '');
+      addBtn.textContent = 'Copied';
+      const open = h('button', { type: 'button', class: 'btn btn-small btn-primary' }, 'Open my code table');
+      open.addEventListener('click', () => window.dispatchEvent(new CustomEvent('w11:goto-step', { detail: { key: 'task1', index: 0 } })));
+      copied.replaceChildren(`Added as row ${row} of your code table in Step 1. `, open);
     });
     cardHost.replaceChildren(
       h(
@@ -130,6 +135,7 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
         inWin === false ? h('p', { class: 'note-warn small' }, 'May not be the participant speaking, so it may not count as participant data.') : null,
         o.checkAgainstVideo ? h('p', { class: 'note-warn small' }, 'Wording is from auto-captions. Check it against the video.') : null,
         addBtn,
+        copied,
       ),
     );
   };
@@ -149,9 +155,66 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
   const galaxyPanel = widgetPanel('Observation Galaxy', 'Drag orbs together to cluster them. Colour is the video; shape is the label (sphere O, cube R, octahedron I).');
   const galaxy = mountWhenVisible(ctx, galaxyPanel, (el) => mountGalaxy(el, observations, { onSelect: showCard }));
 
+  // Wide stage with the reading card beside it; "Full screen" is for projecting or a closer look.
+  const galaxyWrap = h('div', { class: 'galaxy-wrap' }, galaxyPanel.el, h('div', { class: 'galaxy-side' }, cardHost));
+  const fsBtn = h('button', { type: 'button', class: 'btn btn-small galaxy-fs', 'aria-pressed': 'false' }, 'Full screen');
+  const setFull = (on: boolean): void => {
+    fsBtn.textContent = on ? 'Exit full screen' : 'Full screen';
+    fsBtn.setAttribute('aria-pressed', String(on));
+    galaxyWrap.classList.toggle('is-expanded', on && !document.fullscreenElement);
+    window.dispatchEvent(new Event('resize'));
+  };
+  fsBtn.addEventListener('click', () => {
+    const on = fsBtn.getAttribute('aria-pressed') !== 'true';
+    if (on && galaxyWrap.requestFullscreen) {
+      galaxyWrap.requestFullscreen().then(() => setFull(true)).catch(() => setFull(true));
+    } else if (!on && document.fullscreenElement) {
+      void document.exitFullscreen();
+    } else {
+      setFull(on);
+    }
+  });
+  document.addEventListener('fullscreenchange', () => {
+    if (!galaxyWrap.isConnected) return;
+    setFull(document.fullscreenElement === galaxyWrap);
+  });
+  galaxyPanel.el.querySelector('h3')?.after(fsBtn);
+
   const mine = loadMine();
   mine.forEach(addToList);
   mine.forEach((o) => galaxy.ready((g) => g.addOrb(o)));
+
+  /* Group room: orb moves and orbs added by groupmates travel through the shared "galaxy" channel. */
+  const known = new Set<string>([...observations.map((x) => x.id), ...mine.map((x) => x.id)]);
+  const posText = (p: OrbPos): string => p.map((n) => n.toFixed(2)).join(',');
+  galaxy.ready((g) => g.onMoved((id, pos) => sharedSet(['p', id], posText(pos))));
+  const stopShared = onShared((tree) => {
+    if (!galaxyPanel.el.isConnected) {
+      stopShared();
+      return;
+    }
+    const orbsNode = typeof tree.o === 'object' && tree.o ? tree.o : {};
+    const posNode = typeof tree.p === 'object' && tree.p ? tree.p : {};
+    for (const [id, raw] of Object.entries(orbsNode)) {
+      if (known.has(id) || typeof raw !== 'string') continue;
+      try {
+        const r = JSON.parse(raw) as { v: VideoId; t: number; l: Label; x: string };
+        if (!['simon', 'sarah', 'stacey'].includes(r.v) || !['O', 'R', 'I'].includes(r.l)) continue;
+        const o: Observation = { id, video: r.v, t: Number(r.t) || 0, label: r.l, excerpt: String(r.x ?? '') };
+        known.add(id);
+        addToList(o);
+        const p = typeof posNode[id] === 'string' ? (posNode[id] as string).split(',').map(Number) : null;
+        galaxy.ready((g) => g.addOrb(o, p && p.length === 3 && p.every(Number.isFinite) ? (p as OrbPos) : undefined));
+      } catch {
+        /* ignore a malformed record */
+      }
+    }
+    for (const [id, raw] of Object.entries(posNode)) {
+      if (typeof raw !== 'string' || !known.has(id)) continue;
+      const p = raw.split(',').map(Number);
+      if (p.length === 3 && p.every(Number.isFinite)) galaxy.ready((g) => g.setPosition(id, p as OrbPos));
+    }
+  });
 
   /* add-my-observation form */
   const formMsg = h('p', { class: 'small', role: 'status', 'aria-live': 'polite' });
@@ -192,14 +255,20 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
       return;
     }
     const rows = getRows(MY_OBS_KEY) ?? [];
-    rows.push([selVideo.value, fmtTime(t), selLabel.value, text]);
+    const id = `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+    rows.push([selVideo.value, fmtTime(t), selLabel.value, text, id]);
     setRows(MY_OBS_KEY, rows);
-    const o: Observation = { id: `mine-${rows.length}`, video: selVideo.value as VideoId, t, label: selLabel.value as Label, excerpt: text };
-    galaxy.ready((g) => g.addOrb(o));
+    const o: Observation = { id, video: selVideo.value as VideoId, t, label: selLabel.value as Label, excerpt: text };
+    known.add(id);
+    galaxy.ready((g) => {
+      const at = g.addOrb(o);
+      sharedSet(['o', id], JSON.stringify({ v: o.video, t: o.t, l: o.label, x: o.excerpt }));
+      if (at) sharedSet(['p', id], posText(at));
+    });
     addToList(o);
     inText.value = '';
     inTime.value = '';
-    formMsg.textContent = 'Added to the list and the galaxy.';
+    formMsg.textContent = 'Added to the list and the galaxy (and shared with your group room, if you are in one).';
   });
 
   const clusterTable = editableTable({
@@ -212,9 +281,9 @@ export function renderTask1(ctx: PageCtx): HTMLElement {
 
   const step2 = [
     h('p', { class: 'instruction' }, 'Take turns introducing your video and sharing 2-3 observations with their codes. Then group what belongs together.'),
+    galaxyWrap,
     h('h3', null, 'Cluster table'),
     clusterTable.el,
-    h('div', { class: 'split split-even' }, h('div', { class: 'split-main' }, galaxyPanel.el), h('div', { class: 'split-side' }, cardHost)),
     collapsible('Discussion prompts', [h('ol', { class: 'prompt-list' }, t1Discussion.map((p, i) => h('li', null, h('p', null, p), boundTextarea(`t1.d${i + 1}`, p, 2))))]),
     collapsible('Browse all observations as a list', [observations.length ? obsList : h('p', { class: 'muted' }, 'Observations have not loaded.')]),
     collapsible('Add an observation of your own', [form]),
